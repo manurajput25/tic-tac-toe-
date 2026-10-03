@@ -19,8 +19,10 @@ export const ReplayViewer: React.FC<ReplayViewerProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(moves.length);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
 
-  const totalCells = mode === 'grid4x4' ? 16 : 9;
-  const gridColsClass = mode === 'grid4x4' ? 'grid-cols-4' : 'grid-cols-3';
+  const is6x6 = mode === 'grid6x6';
+  const is4x4 = mode === 'grid4x4';
+  const totalCells = is6x6 ? 36 : is4x4 ? 16 : 9;
+  const gridColsClass = is6x6 ? 'grid-cols-6' : is4x4 ? 'grid-cols-4' : 'grid-cols-3';
 
   // Compute reconstructed board at currentStep
   const reconstructedBoard: CellValue[] = Array(totalCells).fill(null);

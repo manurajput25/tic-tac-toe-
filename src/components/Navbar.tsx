@@ -1,235 +1,101 @@
 import React from 'react';
-import {
-  Volume2,
-  VolumeX,
-  RotateCcw,
-  Palette,
-  Sun,
-  Moon,
-  Laptop,
-  Users,
-  User,
-  LogIn,
-  Wifi,
-} from 'lucide-react';
-import { GameMode, ColorMode } from '../types/game';
-import { useAuth } from '../context/AuthContext';
-import { PRESET_AVATARS } from '../types/user';
+import { Settings } from 'lucide-react';
+import { GameMode } from '../types/game';
 
 interface NavbarProps {
   currentMode: GameMode;
   onSelectMode: (mode: GameMode) => void;
-  isMuted: boolean;
-  onToggleMute: () => void;
-  colorMode: ColorMode;
-  onCycleColorMode: () => void;
-  onResetGame: () => void;
   onOpenSettings: () => void;
-  onOpenRules: () => void;
-  onOpenHistory: () => void;
-  onOpenAuth: () => void;
-  onOpenProfile: () => void;
-  onOpenOnlineLobby: () => void;
-  isOnlineActive?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentMode,
   onSelectMode,
-  isMuted,
-  onToggleMute,
-  colorMode,
-  onCycleColorMode,
-  onResetGame,
   onOpenSettings,
-  onOpenRules,
-  onOpenHistory,
-  onOpenAuth,
-  onOpenProfile,
-  onOpenOnlineLobby,
-  isOnlineActive = false,
 }) => {
-  const { user, profile } = useAuth();
-
-  const userAvatar =
-    PRESET_AVATARS.find((a) => a.id === profile?.avatarKey) || PRESET_AVATARS[0];
-
   return (
-    <header className="w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-950/85 backdrop-blur-xl sticky top-0 z-40 transition-colors">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
+    <header className="w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl sticky top-0 z-40 transition-colors">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-3">
         {/* Zone 1: Wordmark */}
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            onResetGame();
-          }}
-          className="font-display text-base sm:text-xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5 sm:gap-2.5 group shrink-0"
-        >
-          <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 text-xs sm:text-sm font-black shadow-[0_0_12px_rgba(6,182,212,0.2)] group-hover:scale-105 transition-transform">
+        <div className="font-display text-sm sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-1 sm:gap-2 group shrink-0 select-none">
+          <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400 text-xs sm:text-sm font-black shadow-[0_0_12px_rgba(6,182,212,0.2)]">
             ✕
           </span>
           <span className="bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
-            Apex Arena
+            <span className="hidden xs:inline sm:hidden">Apex</span>
+            <span className="hidden sm:inline">Apex Arena</span>
           </span>
-          <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-400 text-xs sm:text-sm font-black shadow-[0_0_12px_rgba(244,63,94,0.2)] group-hover:scale-105 transition-transform">
+          <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-400 text-xs sm:text-sm font-black shadow-[0_0_12px_rgba(244,63,94,0.2)]">
             ◯
           </span>
-        </a>
+        </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-slate-900/90 p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
-          <button
-            onClick={() => onSelectMode('classic3x3')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all whitespace-nowrap ${
-              currentMode === 'classic3x3'
-                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            Classic 3×3
-          </button>
-          <button
-            onClick={() => onSelectMode('infinite3')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 ${
-              currentMode === 'infinite3'
-                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <span>Infinite 3-Piece</span>
-            <span className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1.5 py-0.2 rounded-full font-mono border border-amber-500/30">
-              Tactic
-            </span>
-          </button>
-          <button
-            onClick={() => onSelectMode('grid4x4')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all whitespace-nowrap ${
-              currentMode === 'grid4x4'
-                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            Grid 4×4
-          </button>
-          <button
-            onClick={onOpenRules}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded-xl transition-colors whitespace-nowrap"
-          >
-            Rules
-          </button>
-          <button
-            onClick={onOpenHistory}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded-xl transition-colors whitespace-nowrap"
-          >
-            Stats
-          </button>
-        </nav>
+        {/* Zone 2: Navigation Game Modes (Scrollable container on ultra-small screens) */}
+        <div className="flex-1 min-w-0 max-w-md mx-1 flex justify-center">
+          <nav className="flex items-center gap-0.5 sm:gap-1 bg-slate-100 dark:bg-slate-900/90 p-0.5 sm:p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto no-scrollbar max-w-full">
+            <button
+              onClick={() => onSelectMode('classic3x3')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                currentMode === 'classic3x3'
+                  ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <span className="sm:hidden">3×3</span>
+              <span className="hidden sm:inline">Classic 3×3</span>
+            </button>
 
-        {/* Zone 3: Actions, Multiplayer & Profile System */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Online Multiplayer Lobby Button */}
-          <button
-            onClick={onOpenOnlineLobby}
-            aria-label="Online Multiplayer"
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer ${
-              isOnlineActive
-                ? 'bg-emerald-500 text-slate-950 animate-pulse'
-                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-500/20'
-            }`}
-            title="Play Online with Another Player"
-          >
-            <Wifi className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">
-              {isOnlineActive ? 'Online Match' : 'Play Online'}
-            </span>
-          </button>
+            <button
+              onClick={() => onSelectMode('infinite3')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer shrink-0 ${
+                currentMode === 'infinite3'
+                  ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <span className="sm:hidden">Inf 3</span>
+              <span className="hidden sm:inline">Infinite 3</span>
+              <span className="hidden md:inline px-1 py-0.2 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[8px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider">
+                Hot
+              </span>
+            </button>
 
-          {/* Quick Light / Dark Toggle */}
-          <button
-            onClick={onCycleColorMode}
-            aria-label={`Current theme mode: ${colorMode}`}
-            className="p-2 sm:px-2.5 sm:py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-800 cursor-pointer shadow-sm"
-            title={`Mode: ${colorMode.toUpperCase()}`}
-          >
-            {colorMode === 'light' ? (
-              <Sun className="w-4 h-4 text-amber-500" />
-            ) : colorMode === 'dark' ? (
-              <Moon className="w-4 h-4 text-indigo-400" />
-            ) : (
-              <Laptop className="w-4 h-4 text-cyan-400" />
-            )}
-          </button>
+            <button
+              onClick={() => onSelectMode('grid4x4')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                currentMode === 'grid4x4'
+                  ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <span className="sm:hidden">4×4</span>
+              <span className="hidden sm:inline">4×4 Grid</span>
+            </button>
 
-          {/* Sound Toggle */}
-          <button
-            onClick={onToggleMute}
-            aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-            className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-800 cursor-pointer shadow-sm"
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-slate-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
-          </button>
+            <button
+              onClick={() => onSelectMode('grid6x6')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                currentMode === 'grid6x6'
+                  ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <span className="sm:hidden">6×6</span>
+              <span className="hidden sm:inline">6×6 Grid</span>
+            </button>
+          </nav>
+        </div>
 
-          {/* Themes Button */}
+        {/* Zone 3: Single Clean Settings Button */}
+        <div className="flex items-center shrink-0">
           <button
             onClick={onOpenSettings}
-            aria-label="Themes and Customization"
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-sm"
+            aria-label="Settings, Themes, Stats & Rules"
+            className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-sm hover:shadow active:scale-95 group"
+            title="Open Arena Settings"
           >
-            <Palette className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
-            <span className="hidden md:inline">Workshop</span>
-          </button>
-
-          {/* USER PROFILE / LOGIN SYSTEM */}
-          {user && profile ? (
-            /* Logged in: Profile Chip */
-            <button
-              onClick={onOpenProfile}
-              className="flex items-center gap-2 pl-1.5 pr-2.5 sm:pr-3 py-1 bg-slate-100 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700/80 rounded-2xl border border-cyan-500/30 transition-all cursor-pointer shadow-sm group"
-              title="View & Edit Profile, User ID, and Career Stats"
-            >
-              <div
-                className={`w-7 h-7 rounded-xl bg-gradient-to-br ${userAvatar.bg} flex items-center justify-center text-xs shadow-sm shrink-0`}
-              >
-                {profile.photoURL ? (
-                  <img
-                    src={profile.photoURL}
-                    alt={profile.displayName}
-                    className="w-full h-full object-cover rounded-xl"
-                  />
-                ) : (
-                  <span>{userAvatar.icon}</span>
-                )}
-              </div>
-              <div className="text-left hidden sm:block leading-tight">
-                <div className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[80px]">
-                  @{profile.username}
-                </div>
-                <div className="text-[9px] font-mono text-cyan-500 dark:text-cyan-400 font-semibold">
-                  {profile.playerId}
-                </div>
-              </div>
-            </button>
-          ) : (
-            /* Not Logged In: Sign In Button */
-            <button
-              onClick={onOpenAuth}
-              className="flex items-center gap-1.5 px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:shadow-cyan-500/20 active:scale-95"
-              title="Sign in with Google or Mobile OTP"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Sign In</span>
-            </button>
-          )}
-
-          {/* Restart round button */}
-          <button
-            onClick={onResetGame}
-            aria-label="Restart round"
-            className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-800 cursor-pointer shadow-sm"
-            title="Reset Current Round"
-          >
-            <RotateCcw className="w-4 h-4" />
+            <Settings className="w-4 h-4 text-cyan-500 dark:text-cyan-400 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+            <span className="hidden sm:inline font-semibold">Settings</span>
           </button>
         </div>
       </div>

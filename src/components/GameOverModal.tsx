@@ -1,6 +1,6 @@
 import React from 'react';
 import { Player, GameStatus, OpponentType, ThemeConfig } from '../types/game';
-import { RotateCcw, Eye, Trophy, Sparkles, Equal } from 'lucide-react';
+import { RotateCcw, Eye, Equal } from 'lucide-react';
 import { MarkIcon } from './MarkIcon';
 
 interface GameOverModalProps {
@@ -8,6 +8,7 @@ interface GameOverModalProps {
   winner: Player | null;
   opponent: OpponentType;
   theme: ThemeConfig;
+  streakCount?: number;
   onPlayAgain: () => void;
   onReviewMatch: () => void;
   onClose: () => void;
@@ -18,6 +19,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   winner,
   opponent,
   theme,
+  streakCount,
   onPlayAgain,
   onReviewMatch,
   onClose,
@@ -25,8 +27,6 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   if (status === 'playing') return null;
 
   const isWin = status === 'won';
-  const isHumanWinner =
-    isWin && (winner === 'X' || (opponent === 'pvp' && winner === 'O'));
   const isAiWinner = isWin && opponent === 'bot' && winner === 'O';
 
   const accentColor =
@@ -37,21 +37,21 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
       : '#94a3b8';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative w-full max-w-sm p-6 sm:p-7 bg-slate-900/95 border border-slate-700/80 rounded-[32px] shadow-[0_25px_70px_rgba(0,0,0,0.8)] text-center overflow-hidden">
-        {/* Top bevel highlight */}
-        <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 dark:bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
+      <div className="relative w-full max-w-sm p-6 sm:p-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-[32px] shadow-2xl text-center overflow-hidden">
+        {/* Top highlight */}
+        <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-slate-300 dark:via-white/25 to-transparent pointer-events-none" />
 
         {/* Ambient background bloom */}
         <div
-          className="absolute -top-20 left-1/2 -translate-x-1/2 w-56 h-56 rounded-full blur-3xl opacity-35 pointer-events-none"
+          className="absolute -top-20 left-1/2 -translate-x-1/2 w-56 h-56 rounded-full blur-3xl opacity-20 dark:opacity-35 pointer-events-none"
           style={{ backgroundColor: accentColor }}
         />
 
         {/* Winner Mark Presentation */}
         <div className="relative z-10">
           <div
-            className="mx-auto w-20 h-20 mb-4 rounded-3xl flex items-center justify-center bg-slate-800/90 border border-slate-700/80 shadow-2xl relative"
+            className="mx-auto w-20 h-20 mb-4 rounded-3xl flex items-center justify-center bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 shadow-lg relative"
             style={{
               boxShadow: isWin ? `0 0 30px ${accentColor}40` : undefined,
             }}
@@ -63,22 +63,28 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             )}
           </div>
 
-          <h3 className="font-display text-2xl font-extrabold text-white mb-1.5 tracking-tight">
+          {streakCount && streakCount >= 3 && isWin && winner === 'X' && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-orange-500/30 to-rose-500/20 border border-amber-500/50 shadow-md text-amber-500 dark:text-amber-300 text-xs font-black tracking-wider uppercase mb-2 animate-pulse">
+              <span>🔥 {streakCount}-WIN STREAK ACTIVE 🔥</span>
+            </div>
+          )}
+
+          <h3 className="font-display text-2xl font-extrabold text-slate-900 dark:text-white mb-1.5 tracking-tight">
             {isWin
               ? opponent === 'bot'
                 ? isAiWinner
-                  ? 'AI Claims Victory'
+                  ? 'Gemini Claims Victory'
                   : 'Victory Achieved!'
                 : `Player ${winner} Triumphs!`
               : "It's a Stalemate!"}
           </h3>
 
-          <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
             {isWin
               ? opponent === 'bot'
                 ? isAiWinner
-                  ? 'The bot uncovered the decisive sequence. Ready for a rematch?'
-                  : 'Magnificent tactical mastery! Your win streak surges.'
+                  ? 'Gemini uncovered the decisive sequence. Ready for a rematch?'
+                  : 'Magnificent tactical mastery! You defeated Gemini.'
                 : `Player ${winner} dominated the arena and aligned the win.`
               : 'Every corridor contested. Perfect defensive equilibrium.'}
           </p>
@@ -87,7 +93,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="flex flex-col gap-2.5">
             <button
               onClick={onPlayAgain}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-gradient-to-r from-white via-slate-100 to-slate-200 text-slate-950 font-bold text-sm rounded-2xl hover:brightness-105 active:scale-[0.98] transition-all shadow-xl whitespace-nowrap"
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold text-sm rounded-2xl hover:brightness-105 active:scale-[0.98] transition-all shadow-xl whitespace-nowrap cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               <span>Next Round</span>
@@ -96,14 +102,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={onReviewMatch}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-slate-800/90 text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-700 hover:text-white border border-slate-700/70 transition-colors whitespace-nowrap"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors whitespace-nowrap cursor-pointer"
               >
                 <Eye className="w-3.5 h-3.5" />
                 <span>Review Moves</span>
               </button>
               <button
                 onClick={onClose}
-                className="py-2.5 px-4 bg-slate-800/40 text-slate-400 font-medium text-xs rounded-xl hover:bg-slate-800 hover:text-slate-200 border border-slate-800 transition-colors whitespace-nowrap"
+                className="py-2.5 px-4 bg-slate-100 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 font-medium text-xs rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-colors whitespace-nowrap cursor-pointer"
               >
                 Board
               </button>

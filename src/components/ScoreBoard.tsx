@@ -42,9 +42,21 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
           <span>Draws: {score.draws}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 shadow-sm">
-            <Flame className="w-3.5 h-3.5 animate-pulse text-amber-500 dark:text-amber-400" />
-            <span>Streak {score.currentStreak}</span>
+          <span
+            className={`flex items-center gap-1.5 font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+              score.currentStreak >= 3
+                ? 'bg-gradient-to-r from-amber-500/25 via-orange-500/30 to-rose-500/25 text-amber-600 dark:text-amber-300 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.45)] ring-1 ring-amber-400/80'
+                : 'text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 border-amber-500/20 shadow-sm'
+            }`}
+          >
+            <Flame
+              className={`w-3.5 h-3.5 ${
+                score.currentStreak >= 3
+                  ? 'text-orange-500 fill-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)] animate-pulse'
+                  : 'text-amber-500 animate-pulse'
+              }`}
+            />
+            <span>Streak {score.currentStreak} {score.currentStreak >= 3 ? '🔥' : ''}</span>
           </span>
           <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
           <span className="text-slate-400 dark:text-slate-500">Best {score.bestStreak}</span>
@@ -55,7 +67,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
       <div className="grid grid-cols-2 gap-3 sm:gap-4 relative">
         {/* Player X Card */}
         <div
-          className={`p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
+          className={`p-2.5 sm:p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
             isXTurn
               ? 'bg-white/95 dark:bg-slate-900/90 border-cyan-500/60 shadow-[0_4px_20px_rgba(6,182,212,0.15)] dark:shadow-[0_0_30px_rgba(6,182,212,0.22)] scale-[1.02]'
               : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 opacity-75 hover:opacity-90'
@@ -115,7 +127,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
         {/* Player O Card */}
         <div
-          className={`p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
+          className={`p-2.5 sm:p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
             isOTurn
               ? 'bg-white/95 dark:bg-slate-900/90 border-rose-500/60 shadow-[0_4px_20px_rgba(244,63,94,0.15)] dark:shadow-[0_0_30px_rgba(244,63,94,0.22)] scale-[1.02]'
               : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 opacity-75 hover:opacity-90'
@@ -141,10 +153,10 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide">
-                    {opponent === 'bot' ? 'AI Bot' : 'Player O'}
+                    {opponent === 'bot' ? 'Gemini' : 'Player O'}
                   </span>
                   {opponent === 'bot' ? (
-                    <Bot className="w-3 h-3 text-slate-400" />
+                    <Bot className="w-3 h-3 text-cyan-500 dark:text-cyan-400" />
                   ) : (
                     <User className="w-3 h-3 text-slate-400" />
                   )}
@@ -154,7 +166,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
                     isBotThinking ? (
                       <span className="text-rose-600 dark:text-rose-400 font-semibold animate-pulse flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block" />
-                        Thinking...
+                        Gemini is calculating...
                       </span>
                     ) : (
                       <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
@@ -163,7 +175,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
                       </span>
                     )
                   ) : opponent === 'bot' ? (
-                    difficultyLabel
+                    `Gemini · ${difficultyLabel}`
                   ) : (
                     'Waiting'
                   )}

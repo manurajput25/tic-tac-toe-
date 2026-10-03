@@ -62,7 +62,76 @@ export function checkWin4x4(board: CellValue[]): WinningLine | null {
   return null;
 }
 
+// Check win condition for 6x6 (4 in a row to win on a 36-cell grid)
+export function checkWin6x6(board: CellValue[]): WinningLine | null {
+  const lines: { indices: number[]; direction: WinningLine['direction']; rowOrCol?: number }[] = [];
+
+  // Rows (4 consecutive in each row)
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c <= 2; c++) {
+      lines.push({
+        indices: [r * 6 + c, r * 6 + c + 1, r * 6 + c + 2, r * 6 + c + 3],
+        direction: 'horizontal',
+        rowOrCol: r,
+      });
+    }
+  }
+
+  // Columns (4 consecutive in each column)
+  for (let c = 0; c < 6; c++) {
+    for (let r = 0; r <= 2; r++) {
+      lines.push({
+        indices: [r * 6 + c, (r + 1) * 6 + c, (r + 2) * 6 + c, (r + 3) * 6 + c],
+        direction: 'vertical',
+        rowOrCol: c,
+      });
+    }
+  }
+
+  // Diagonals down-right (\)
+  for (let r = 0; r <= 2; r++) {
+    for (let c = 0; c <= 2; c++) {
+      lines.push({
+        indices: [
+          r * 6 + c,
+          (r + 1) * 6 + c + 1,
+          (r + 2) * 6 + c + 2,
+          (r + 3) * 6 + c + 3,
+        ],
+        direction: 'diagonal-main',
+      });
+    }
+  }
+
+  // Diagonals down-left (/)
+  for (let r = 0; r <= 2; r++) {
+    for (let c = 3; c < 6; c++) {
+      lines.push({
+        indices: [
+          r * 6 + c,
+          (r + 1) * 6 + c - 1,
+          (r + 2) * 6 + c - 2,
+          (r + 3) * 6 + c - 3,
+        ],
+        direction: 'diagonal-anti',
+      });
+    }
+  }
+
+  for (const line of lines) {
+    const [a, b, c, d] = line.indices;
+    if (board[a] && board[a] === board[b] && board[a] === board[c] && board[a] === board[d]) {
+      return line;
+    }
+  }
+
+  return null;
+}
+
 export function checkWin(board: CellValue[], mode: GameMode): WinningLine | null {
+  if (mode === 'grid6x6') {
+    return checkWin6x6(board);
+  }
   if (mode === 'grid4x4') {
     return checkWin4x4(board);
   }
@@ -304,6 +373,90 @@ export function getBestMove4x4(
   return availableMoves[Math.floor(Math.random() * availableMoves.length)];
 }
 
+// AI Bot Move Generator for 6x6 Grid
+export function getBestMove6x6(
+  board: CellValue[],
+  aiPlayer: Player,
+  difficulty: BotDifficulty = 'unbeatable'
+): number {
+  const humanPlayer: Player = aiPlayer === 'X' ? 'O' : 'X';
+  const availableMoves: number[] = [];
+
+  for (let i = 0; i < 36; i++) {
+    if (board[i] === null) availableMoves.push(i);
+  }
+
+  if (availableMoves.length === 0) return -1;
+
+  // 1. Can Gemini win in one move?
+  for (const move of availableMoves) {
+    board[move] = aiPlayer;
+    if (checkWin6x6(board)) {
+      board[move] = null;
+      return move;
+    }
+    board[move] = null;
+  }
+
+  // 2. Must Gemini block human immediate win?
+  for (const move of availableMoves) {
+    board[move] = humanPlayer;
+    if (checkWin6x6(board)) {
+      board[move] = null;
+      return move;
+    }
+    board[move] = null;
+  }
+
+  // Easy mode: random pick
+  if (difficulty === 'easy' && Math.random() < 0.65) {
+    return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+  }
+
+  // 3. Central 4x4 inner zone (rows 1..4, cols 1..4) is high tactical value
+  const innerCentralIndices = [
+    7, 8, 9, 10,
+    13, 14, 15, 16,
+    19, 20, 21, 22,
+    25, 26, 27, 28
+  ];
+  const centerMoves = innerCentralIndices.filter(idx => board[idx] === null);
+
+  // Core 2x2 epicenter
+  const coreEpicenter = [14, 15, 20, 21].filter(idx => board[idx] === null);
+  if (coreEpicenter.length > 0 && Math.random() < 0.85) {
+    return coreEpicenter[Math.floor(Math.random() * coreEpicenter.length)];
+  }
+
+  if (centerMoves.length > 0 && Math.random() < 0.75) {
+    return centerMoves[Math.floor(Math.random() * centerMoves.length)];
+  }
+
+  // Adjacent moves to existing AI pieces
+  const adjacentMoves = availableMoves.filter(idx => {
+    const r = Math.floor(idx / 6);
+    const c = idx % 6;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr >= 0 && nr < 6 && nc >= 0 && nc < 6) {
+          const neighbor = board[nr * 6 + nc];
+          if (neighbor === aiPlayer || neighbor === humanPlayer) return true;
+        }
+      }
+    }
+    return false;
+  });
+
+  if (adjacentMoves.length > 0) {
+    return adjacentMoves[Math.floor(Math.random() * adjacentMoves.length)];
+  }
+
+  return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+}
+
 // Coach Hint: compute the best suggested move for the current player
 export function getHintMove(
   board: CellValue[],
@@ -312,6 +465,9 @@ export function getHintMove(
   xHistory: number[] = [],
   oHistory: number[] = []
 ): number {
+  if (mode === 'grid6x6') {
+    return getBestMove6x6(board, currentPlayer, 'unbeatable');
+  }
   if (mode === 'grid4x4') {
     return getBestMove4x4(board, currentPlayer, 'unbeatable');
   }

@@ -18,10 +18,12 @@ import {
   getBestMove3x3,
   getBestMoveInfinite,
   getBestMove4x4,
+  getBestMove6x6,
   getHintMove,
 } from '../utils/ai';
 
 const SCORE_STORAGE_KEY = 'apex_ttt_scores_v1';
+const getCellCount = (m: GameMode): number => (m === 'grid6x6' ? 36 : m === 'grid4x4' ? 16 : 9);
 
 export interface UseGameEngineOptions {
   mode: GameMode;
@@ -29,7 +31,7 @@ export interface UseGameEngineOptions {
   botDifficulty: BotDifficulty;
   startingPlayer: 'X' | 'O' | 'alternate';
   blitzDuration: number | null;
-  isOnlineActive: boolean;
+  isOnlineActive?: boolean;
   onGameEnd?: (result: 'win' | 'loss' | 'draw') => void;
 }
 
@@ -39,10 +41,10 @@ export function useGameEngine({
   botDifficulty,
   startingPlayer,
   blitzDuration,
-  isOnlineActive,
+  isOnlineActive = false,
   onGameEnd,
 }: UseGameEngineOptions) {
-  const totalCells = mode === 'grid4x4' ? 16 : 9;
+  const totalCells = getCellCount(mode);
 
   // Board & Match State
   const [board, setBoard] = useState<CellValue[]>(() => Array(totalCells).fill(null));
@@ -61,6 +63,7 @@ export function useGameEngine({
   const [isBotThinking, setIsBotThinking] = useState<boolean>(false);
   const [hintIndex, setHintIndex] = useState<number | null>(null);
   const [blitzTimeLeft, setBlitzTimeLeft] = useState<number | null>(blitzDuration);
+  const [streakMilestone, setStreakMilestone] = useState<number | null>(null);
 
   // Score Tracking
   const [score, setScore] = useState<GameScore>(() => {
@@ -84,7 +87,7 @@ export function useGameEngine({
 
   // Reset board when Game Mode changes
   useEffect(() => {
-    const cells = mode === 'grid4x4' ? 16 : 9;
+    const cells = getCellCount(mode);
     setBoard(Array(cells).fill(null));
     setXPieceIndices([]);
     setOPieceIndices([]);
@@ -111,7 +114,7 @@ export function useGameEngine({
   // Start fresh round
   const resetRound = useCallback(() => {
     sound.playClick();
-    const cells = mode === 'grid4x4' ? 16 : 9;
+    const cells = getCellCount(mode);
     const nextRound = roundNumber + 1;
 
     setRoundNumber(nextRound);
@@ -124,6 +127,7 @@ export function useGameEngine({
     setOPieceIndices([]);
     setHintIndex(null);
     setIsBotThinking(false);
+    setStreakMilestone(null);
 
     const starter = getStartingPlayer(nextRound);
     setCurrentPlayer(starter);
@@ -204,15 +208,22 @@ export function useGameEngine({
         setStatus('won');
         setHintIndex(null);
 
-        sound.playWin();
-        triggerConfetti();
+        const isX = playerToMove === 'X';
+        const newStreak = isX ? score.currentStreak + 1 : 0;
+
+        if (newStreak === 3) {
+          // Special 3-win streak milestone! Trigger distinct inferno sequence
+          setStreakMilestone(3);
+        } else {
+          // Standard single-round win confetti
+          sound.playWin();
+          triggerConfetti();
+        }
 
         // Update score
         setScore((prev) => {
-          const isX = playerToMove === 'X';
           const newPlayerX = isX ? prev.playerX + 1 : prev.playerX;
           const newPlayerO = !isX ? prev.playerO + 1 : prev.playerO;
-          const newStreak = isX ? prev.currentStreak + 1 : 0;
           return {
             playerX: newPlayerX,
             playerO: newPlayerO,
@@ -293,7 +304,7 @@ export function useGameEngine({
     const remainingMoves = moves.slice(0, moves.length - stepCount);
 
     // Replay board from scratch to guarantee pure state
-    const cells = mode === 'grid4x4' ? 16 : 9;
+    const cells = getCellCount(mode);
     const restoredBoard: CellValue[] = Array(cells).fill(null);
     let xPieces: number[] = [];
     let oPieces: number[] = [];
@@ -341,7 +352,9 @@ export function useGameEngine({
 
     const timer = setTimeout(() => {
       let botMove = -1;
-      if (mode === 'grid4x4') {
+      if (mode === 'grid6x6') {
+        botMove = getBestMove6x6(board, 'O', botDifficulty);
+      } else if (mode === 'grid4x4') {
         botMove = getBestMove4x4(board, 'O', botDifficulty);
       } else if (mode === 'infinite3') {
         botMove = getBestMoveInfinite(board, oPieceIndices, xPieceIndices, 'O', botDifficulty);
@@ -432,6 +445,8 @@ export function useGameEngine({
     isBotThinking,
     hintIndex,
     blitzTimeLeft,
+    streakMilestone,
+    clearStreakMilestone: () => setStreakMilestone(null),
     score,
     setScore,
     makeMove,

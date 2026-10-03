@@ -52,9 +52,10 @@ export const Board: React.FC<BoardProps> = ({
 }) => {
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
 
+  const is6x6 = mode === 'grid6x6';
   const is4x4 = mode === 'grid4x4';
-  const size = is4x4 ? 4 : 3;
-  const gridColsClass = is4x4 ? 'grid-cols-4' : 'grid-cols-3';
+  const size = is6x6 ? 6 : is4x4 ? 4 : 3;
+  const gridColsClass = is6x6 ? 'grid-cols-6' : is4x4 ? 'grid-cols-4' : 'grid-cols-3';
 
   // Determine if a cell is the oldest for X or O in infinite mode
   const getInfiniteInfo = (index: number) => {
@@ -133,7 +134,11 @@ export const Board: React.FC<BoardProps> = ({
   };
 
   return (
-    <div className="relative mx-auto w-full max-w-[440px] aspect-square transition-all duration-500">
+    <div
+      className={`relative mx-auto w-full ${
+        is6x6 ? 'max-w-[min(92vw,480px)]' : is4x4 ? 'max-w-[min(92vw,440px)]' : 'max-w-[min(92vw,420px)]'
+      } aspect-square transition-all duration-500`}
+    >
       {/* Optional Board Coordinates (A-C / 1-3) */}
       {customization.showCoordinates && (
         <>
@@ -184,7 +189,9 @@ export const Board: React.FC<BoardProps> = ({
         <div
           role="grid"
           aria-label="Tic-Tac-Toe Game Board"
-          className={`relative z-10 w-full h-full grid ${gridColsClass} gap-2.5 sm:gap-3`}
+          className={`relative z-10 w-full h-full grid ${gridColsClass} ${
+            is6x6 ? 'gap-1 sm:gap-2' : is4x4 ? 'gap-2 sm:gap-2.5' : 'gap-2.5 sm:gap-3'
+          }`}
         >
           {board.map((cell, index) => {
             const isWinningCell = winningLine?.indices.includes(index);
@@ -223,7 +230,7 @@ export const Board: React.FC<BoardProps> = ({
                   <MarkIcon
                     player={cell}
                     theme={theme}
-                    size={is4x4 ? 'md' : 'lg'}
+                    size={is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
                     isExpiring={isExpiring}
                     orderNumber={order}
                     markStyle={customization.markStyle}
@@ -236,7 +243,7 @@ export const Board: React.FC<BoardProps> = ({
                       <MarkIcon
                         player={currentPlayer}
                         theme={theme}
-                        size={is4x4 ? 'md' : 'lg'}
+                        size={is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
                         animated={false}
                         markStyle={customization.markStyle}
                       />

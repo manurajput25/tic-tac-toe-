@@ -10,15 +10,11 @@ import {
   BotDifficulty,
   ThemeId,
   ColorMode,
-  Player,
   BoardCustomization,
   BackgroundCustomization,
-  WinningLine,
 } from './types/game';
-import { THEMES, BACKGROUND_THEMES } from './utils/theme';
+import { THEMES } from './utils/theme';
 import { sound } from './utils/audio';
-import { triggerConfetti } from './utils/confetti';
-import { checkWin, isBoardFull } from './utils/ai';
 import { useGameEngine } from './hooks/useGameEngine';
 import { Navbar } from './components/Navbar';
 import { ScoreBoard } from './components/ScoreBoard';
@@ -30,18 +26,7 @@ import { GameSettingsModal } from './components/GameSettingsModal';
 import { RulesModal } from './components/RulesModal';
 import { StatsModal } from './components/StatsModal';
 import { ParticleBackground } from './components/ParticleBackground';
-import { AuthModal } from './components/AuthModal';
-import { ProfileModal } from './components/ProfileModal';
-import { OnlineLobbyModal } from './components/OnlineLobbyModal';
-import { OnlineMatchBanner } from './components/OnlineMatchBanner';
-import { useAuth } from './context/AuthContext';
-import { MatchRoom } from './types/user';
-import {
-  subscribeToRoom,
-  makeOnlineMove,
-  leaveOnlineRoom,
-  resetOnlineMatch,
-} from './services/multiplayerService';
+import { StreakCelebration } from './components/StreakCelebration';
 
 const PREFS_STORAGE_KEY = 'apex_ttt_prefs_v1';
 
@@ -75,13 +60,6 @@ export default function App() {
   const [boardCustomization, setBoardCustomization] = useState<BoardCustomization>(DEFAULT_BOARD_CUSTOMIZATION);
   const [backgroundCustomization, setBackgroundCustomization] = useState<BackgroundCustomization>(DEFAULT_BACKGROUND_CUSTOMIZATION);
 
-  // Auth & Cloud Profile Context
-  const { user, profile, redirectLoading, recordGameResult } = useAuth();
-
-  // Online Multiplayer Room State
-  const [activeOnlineRoom, setActiveOnlineRoom] = useState<MatchRoom | null>(null);
-  const [localPlayerMark, setLocalPlayerMark] = useState<Player>('X');
-
   // Unified Clean Game Engine
   const engine = useGameEngine({
     mode,
@@ -89,10 +67,6 @@ export default function App() {
     botDifficulty,
     startingPlayer,
     blitzDuration,
-    isOnlineActive: !!activeOnlineRoom,
-    onGameEnd: (result) => {
-      recordGameResult(result);
-    },
   });
 
   // Modal Dialog States
@@ -101,9 +75,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isStatsOpen, setIsStatsOpen] = useState<boolean>(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
-  const [isOnlineLobbyOpen, setIsOnlineLobbyOpen] = useState<boolean>(false);
 
   // Atmosphere transition
   const [transitionKey, setTransitionKey] = useState<number>(0);
@@ -117,61 +88,79 @@ export default function App() {
 
   const isDarkMode = colorMode === 'dark' || (colorMode === 'system' && systemPrefersDark);
   const currentTheme = THEMES[themeId] || THEMES['cyber-neon'];
-  const bgThemeConfig = BACKGROUND_THEMES[backgroundCustomization.bgTheme] || BACKGROUND_THEMES['deep-space'];
 
-  // Load Saved Preferences on Mount
+  // Listen for System Dark Mode changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  // Update HTML root class for dark mode
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  // Load Saved Preferences from localStorage on Boot
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(PREFS_STORAGE_KEY);
-      if (raw) {
-        const p = JSON.parse(raw);
-        if (p.themeId && THEMES[p.themeId as ThemeId]) setThemeId(p.themeId);
-        if (p.colorMode) setColorMode(p.colorMode);
-        if (p.botDifficulty) setBotDifficulty(p.botDifficulty);
-        if (p.blitzDuration !== undefined) setBlitzDuration(p.blitzDuration);
-        if (p.startingPlayer) setStartingPlayer(p.startingPlayer);
-        if (p.boardCustomization) setBoardCustomization((prev) => ({ ...prev, ...p.boardCustomization }));
-        if (p.backgroundCustomization) setBackgroundCustomization((prev) => ({ ...prev, ...p.backgroundCustomization }));
+      const saved = localStorage.getItem(PREFS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.mode) setMode(parsed.mode);
+        if (parsed.opponent) setOpponent(parsed.opponent);
+        if (parsed.botDifficulty) setBotDifficulty(parsed.botDifficulty);
+        if (parsed.themeId) setThemeId(parsed.themeId);
+        if (parsed.colorMode) setColorMode(parsed.colorMode);
+        if (parsed.startingPlayer) setStartingPlayer(parsed.startingPlayer);
+        if (parsed.blitzDuration !== undefined) setBlitzDuration(parsed.blitzDuration);
+        if (parsed.boardCustomization) {
+          setBoardCustomization((prev) => ({ ...prev, ...parsed.boardCustomization }));
+        }
+        if (parsed.backgroundCustomization) {
+          setBackgroundCustomization((prev) => ({ ...prev, ...parsed.backgroundCustomization }));
+        }
       }
     } catch {
       // ignore
     }
   }, []);
 
+  // Save Preferences to localStorage
   const savePrefs = (updates: Record<string, unknown>) => {
     try {
-      const prev = localStorage.getItem(PREFS_STORAGE_KEY);
-      const parsed = prev ? JSON.parse(prev) : {};
-      localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify({ ...parsed, ...updates }));
+      const saved = localStorage.getItem(PREFS_STORAGE_KEY);
+      const current = saved ? JSON.parse(saved) : {};
+      localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify({ ...current, ...updates }));
     } catch {
       // ignore
     }
   };
 
-  // Sync Dark/Light theme class on document
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.classList.add('light');
-    }
-  }, [isDarkMode]);
-
-  // Open GameOver modal gracefully after match concludes
+  // Open Game Over Modal when match finishes (unless streak milestone sequence is active)
   useEffect(() => {
     if (engine.status === 'won' || engine.status === 'draw') {
+      if (engine.streakMilestone === 3) {
+        setIsGameOverModalOpen(false);
+        return;
+      }
       const timer = setTimeout(() => {
         setIsGameOverModalOpen(true);
-      }, 750);
+      }, 700);
       return () => clearTimeout(timer);
     } else {
       setIsGameOverModalOpen(false);
     }
-  }, [engine.status]);
+  }, [engine.status, engine.streakMilestone]);
 
-  // Visual Atmosphere Transition on Theme Switch
+  // Trigger Theme Ambient Ripple
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -181,110 +170,8 @@ export default function App() {
     setTransitionKey((prev) => prev + 1);
   }, [themeId, colorMode, currentTheme.xColor]);
 
-  // Subscribe to Live Online Room Updates
-  useEffect(() => {
-    if (!activeOnlineRoom) return;
-
-    const unsubscribe = subscribeToRoom(activeOnlineRoom.id, (room) => {
-      if (!room || room.status === 'abandoned') {
-        setActiveOnlineRoom(null);
-        engine.resetRound();
-        return;
-      }
-
-      setActiveOnlineRoom(room);
-      engine.setBoard(room.board);
-      engine.setCurrentPlayer(room.currentTurn);
-      if (room.xPieceIndices) engine.setXPieceIndices(room.xPieceIndices);
-      if (room.oPieceIndices) engine.setOPieceIndices(room.oPieceIndices);
-
-      if (room.winner !== undefined && room.winner !== null) {
-        engine.setWinner(room.winner === 'draw' ? null : room.winner);
-        engine.setStatus(room.winner === 'draw' ? 'draw' : 'won');
-        engine.setWinningLine(room.winningLine || null);
-
-        // Sound & celebratory effects once when game ends
-        if (room.status === 'completed' && engine.status === 'playing') {
-          if (room.winner === localPlayerMark) {
-            triggerConfetti();
-            sound.playWin();
-            recordGameResult('win');
-          } else if (room.winner === 'draw') {
-            sound.playDraw();
-            recordGameResult('draw');
-          } else {
-            sound.playDefeat();
-            recordGameResult('loss');
-          }
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [activeOnlineRoom?.id, localPlayerMark, engine, recordGameResult]);
-
-  // Handle Cell Click (Local & Online)
+  // Handle Cell Click
   const handleCellClick = (index: number) => {
-    // 1. Online Multiplayer Move
-    if (activeOnlineRoom) {
-      if (activeOnlineRoom.status !== 'playing') return;
-      if (activeOnlineRoom.currentTurn !== localPlayerMark) return; // Wait for turn!
-      if (engine.board[index] !== null) return;
-
-      const newBoard = [...engine.board];
-      newBoard[index] = localPlayerMark;
-
-      let newXPieces = [...engine.xPieceIndices];
-      let newOPieces = [...engine.oPieceIndices];
-
-      if (mode === 'infinite3') {
-        if (localPlayerMark === 'X') {
-          if (newXPieces.length >= 3) {
-            const oldest = newXPieces.shift()!;
-            newBoard[oldest] = null;
-            sound.playDisappear();
-          }
-          newXPieces.push(index);
-        } else {
-          if (newOPieces.length >= 3) {
-            const oldest = newOPieces.shift()!;
-            newBoard[oldest] = null;
-            sound.playDisappear();
-          }
-          newOPieces.push(index);
-        }
-      }
-
-      sound.playMove(localPlayerMark);
-
-      const winResult = checkWin(newBoard, mode);
-      const isFull = isBoardFull(newBoard);
-      const nextTurn: Player = localPlayerMark === 'X' ? 'O' : 'X';
-
-      let winVal: Player | 'draw' | null = null;
-      let lineVal: WinningLine | null = null;
-
-      if (winResult) {
-        winVal = localPlayerMark;
-        lineVal = winResult;
-      } else if (isFull && mode !== 'infinite3') {
-        winVal = 'draw';
-      }
-
-      makeOnlineMove(
-        activeOnlineRoom.id,
-        newBoard,
-        nextTurn,
-        index,
-        newXPieces,
-        newOPieces,
-        winVal,
-        lineVal
-      );
-      return;
-    }
-
-    // 2. Local Move (PvP or vs Bot)
     engine.makeMove(index);
   };
 
@@ -303,11 +190,7 @@ export default function App() {
       }
 
       if (e.key === 'r' || e.key === 'R') {
-        if (activeOnlineRoom) {
-          resetOnlineMatch(activeOnlineRoom.id, activeOnlineRoom.mode);
-        } else {
-          engine.resetRound();
-        }
+        engine.resetRound();
         return;
       }
 
@@ -321,31 +204,15 @@ export default function App() {
         return;
       }
 
-      // 3x3 Numpad mapping (7 8 9 / 4 5 6 / 1 2 3)
-      if (mode !== 'grid4x4') {
-        const numpadMap: Record<string, number> = {
-          Numpad7: 0,
-          Numpad8: 1,
-          Numpad9: 2,
-          Numpad4: 3,
-          Numpad5: 4,
-          Numpad6: 5,
-          Numpad1: 6,
-          Numpad2: 7,
-          Numpad3: 8,
-          Digit1: 0,
-          Digit2: 1,
-          Digit3: 2,
-          Digit4: 3,
-          Digit5: 4,
-          Digit6: 5,
-          Digit7: 6,
-          Digit8: 7,
-          Digit9: 8,
+      // Numpad / Digits 1..9 mapping for 3x3 board
+      if (mode === 'classic3x3' || mode === 'infinite3') {
+        const keyMap: Record<string, number> = {
+          '7': 0, '8': 1, '9': 2,
+          '4': 3, '5': 4, '6': 5,
+          '1': 6, '2': 7, '3': 8,
         };
-
-        if (numpadMap[e.code] !== undefined) {
-          handleCellClick(numpadMap[e.code]);
+        if (e.key in keyMap) {
+          handleCellClick(keyMap[e.key]);
         }
       }
     };
@@ -358,43 +225,25 @@ export default function App() {
     isSettingsOpen,
     isRulesOpen,
     isStatsOpen,
-    mode,
-    activeOnlineRoom,
     engine,
+    mode,
   ]);
 
   return (
     <div
-      className={`min-h-screen ${
-        isDarkMode ? bgThemeConfig.cssBg : 'bg-slate-100'
-      } text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-700`}
+      className={`min-h-screen flex flex-col font-sans transition-colors duration-500 relative overflow-x-hidden selection:bg-cyan-500/30 selection:text-cyan-300 ${
+        isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+      }`}
     >
-      {/* Interactive Particle Canvas */}
+      {/* Dynamic Interactive Ambient Canvas */}
       <ParticleBackground
         theme={currentTheme}
         isDark={isDarkMode}
         customization={backgroundCustomization}
+        winningPlayer={engine.status === 'won' ? engine.winner : null}
       />
 
-      {/* Ambient Lighting Mesh */}
-      {backgroundCustomization.showGlowOrbs && (
-        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-          <div
-            className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full blur-[140px] opacity-25"
-            style={{ backgroundColor: bgThemeConfig.ambientOrbs.orb1 }}
-          />
-          <div
-            className="absolute top-[40%] -left-[10%] w-[450px] h-[450px] rounded-full blur-[130px] opacity-20"
-            style={{ backgroundColor: bgThemeConfig.ambientOrbs.orb2 }}
-          />
-          <div
-            className="absolute -bottom-[10%] -right-[10%] w-[450px] h-[450px] rounded-full blur-[130px] opacity-20"
-            style={{ backgroundColor: bgThemeConfig.ambientOrbs.orb3 }}
-          />
-        </div>
-      )}
-
-      {/* Screen Atmosphere Transition Bloom */}
+      {/* Atmospheric Theme Ripple on Switch */}
       {transitionKey > 0 && (
         <div
           key={transitionKey}
@@ -409,79 +258,22 @@ export default function App() {
       <Navbar
         currentMode={mode}
         onSelectMode={(newMode) => {
-          if (activeOnlineRoom) return;
           sound.playClick();
           setMode(newMode);
-        }}
-        isMuted={isMuted}
-        onToggleMute={() => setIsMuted(sound.toggleMute())}
-        colorMode={colorMode}
-        onCycleColorMode={() => {
-          sound.playClick();
-          const next: ColorMode = colorMode === 'dark' ? 'light' : colorMode === 'light' ? 'system' : 'dark';
-          setColorMode(next);
-          savePrefs({ colorMode: next });
-        }}
-        onResetGame={() => {
-          if (activeOnlineRoom) {
-            resetOnlineMatch(activeOnlineRoom.id, activeOnlineRoom.mode);
-          } else {
-            engine.resetRound();
-          }
         }}
         onOpenSettings={() => {
           sound.playClick();
           setIsSettingsOpen(true);
         }}
-        onOpenRules={() => {
-          sound.playClick();
-          setIsRulesOpen(true);
-        }}
-        onOpenHistory={() => {
-          sound.playClick();
-          setIsStatsOpen(true);
-        }}
-        onOpenAuth={() => {
-          sound.playClick();
-          setIsAuthModalOpen(true);
-        }}
-        onOpenProfile={() => {
-          sound.playClick();
-          setIsProfileModalOpen(true);
-        }}
-        onOpenOnlineLobby={() => {
-          sound.playClick();
-          setIsOnlineLobbyOpen(true);
-        }}
-        isOnlineActive={!!activeOnlineRoom}
       />
 
       {/* Main Game Center */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 sm:py-8 max-w-4xl mx-auto w-full">
-        {/* Active Online Match Banner */}
-        {activeOnlineRoom && (
-          <OnlineMatchBanner
-            room={activeOnlineRoom}
-            localPlayerMark={localPlayerMark}
-            isMyTurn={activeOnlineRoom.currentTurn === localPlayerMark}
-            onLeaveRoom={async () => {
-              sound.playClick();
-              if (user) await leaveOnlineRoom(activeOnlineRoom.id, user.uid);
-              setActiveOnlineRoom(null);
-              engine.resetRound();
-            }}
-            onRematch={() => {
-              sound.playClick();
-              resetOnlineMatch(activeOnlineRoom.id, activeOnlineRoom.mode);
-            }}
-          />
-        )}
-
         {/* Score & Turn Status */}
         <ScoreBoard
           score={engine.score}
           currentPlayer={engine.currentPlayer}
-          opponent={activeOnlineRoom ? 'pvp' : opponent}
+          opponent={opponent}
           botDifficulty={botDifficulty}
           theme={currentTheme}
           blitzTimeLeft={engine.blitzTimeLeft}
@@ -519,49 +311,58 @@ export default function App() {
           onChangeDifficulty={(diff) => {
             sound.playClick();
             setBotDifficulty(diff);
-            savePrefs({ botDifficulty: diff });
             engine.resetRound();
           }}
           onGetHint={engine.requestHint}
           onResetRound={engine.resetRound}
           isGameOver={engine.status !== 'playing'}
-          canHint={!engine.isBotThinking && engine.status === 'playing'}
+          canHint={engine.status === 'playing' && !engine.isBotThinking}
           gameMode={mode}
         />
       </main>
 
-      {/* Footer */}
-      <footer className="w-full border-t border-slate-200/80 dark:border-slate-900/80 py-4 px-6 text-center text-xs text-slate-500 dark:text-slate-400 z-10">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Apex Tic-Tac-Toe · Pure & Modern Arena</span>
-          <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
-            <button onClick={() => setIsRulesOpen(true)} className="hover:text-slate-200 transition-colors">
-              How to Play
-            </button>
-            <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-200 transition-colors">
-              Themes
-            </button>
-            <button onClick={() => setIsStatsOpen(true)} className="hover:text-slate-200 transition-colors">
-              Stats
-            </button>
-          </div>
+      {/* Footer Branding & Keyboard Info */}
+      <footer className="relative z-10 py-4 text-center text-xs text-slate-500 dark:text-slate-500 border-t border-slate-200/60 dark:border-slate-800/60">
+        <div className="flex items-center justify-center gap-4">
+          <span>Keyboard: Numpad 1..9 to place move</span>
+          <span>•</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">R</kbd> restart</span>
+          <span>•</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">H</kbd> hint</span>
+          <span>•</span>
+          <span><kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-mono">M</kbd> mute</span>
         </div>
       </footer>
 
-      {/* Modals & Dialogs */}
-      <GameOverModal
-        status={engine.status}
-        winner={engine.winner}
-        opponent={opponent}
-        theme={currentTheme}
-        onPlayAgain={engine.resetRound}
-        onReviewMatch={() => {
-          sound.playClick();
-          setIsGameOverModalOpen(false);
-          setIsReplayOpen(true);
-        }}
-        onClose={() => setIsGameOverModalOpen(false)}
-      />
+      {/* Special 3-Win Streak Animation Sequence */}
+      {engine.streakMilestone === 3 && (
+        <StreakCelebration
+          streakCount={3}
+          onClose={() => {
+            sound.playClick();
+            engine.clearStreakMilestone();
+            setIsGameOverModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Dialog Modals */}
+      {isGameOverModalOpen && (
+        <GameOverModal
+          status={engine.status}
+          winner={engine.winner}
+          opponent={opponent}
+          theme={currentTheme}
+          streakCount={engine.score.currentStreak}
+          onPlayAgain={engine.resetRound}
+          onReviewMatch={() => {
+            sound.playClick();
+            setIsGameOverModalOpen(false);
+            setIsReplayOpen(true);
+          }}
+          onClose={() => setIsGameOverModalOpen(false)}
+        />
+      )}
 
       {isReplayOpen && (
         <ReplayViewer
@@ -616,6 +417,9 @@ export default function App() {
               return updated;
             });
           }}
+          score={engine.score}
+          onResetStats={engine.resetScores}
+          onResetRound={engine.resetRound}
           onClose={() => setIsSettingsOpen(false)}
         />
       )}
@@ -628,53 +432,6 @@ export default function App() {
           onResetStats={engine.resetScores}
           onClose={() => setIsStatsOpen(false)}
         />
-      )}
-
-      {isAuthModalOpen && (
-        <AuthModal
-          onClose={() => setIsAuthModalOpen(false)}
-          onSuccess={() => setIsProfileModalOpen(true)}
-        />
-      )}
-
-      {isProfileModalOpen && (
-        <ProfileModal
-          onClose={() => setIsProfileModalOpen(false)}
-          onOpenOnlineLobby={() => setIsOnlineLobbyOpen(true)}
-        />
-      )}
-
-      {isOnlineLobbyOpen && (
-        <OnlineLobbyModal
-          onClose={() => setIsOnlineLobbyOpen(false)}
-          onEnterOnlineMatch={(room) => {
-            sound.playClick();
-            setActiveOnlineRoom(room);
-            setLocalPlayerMark(profile && profile.uid === room.hostId ? 'X' : 'O');
-            setMode(room.mode);
-            engine.setBoard(room.board);
-            engine.setCurrentPlayer(room.currentTurn);
-            engine.setStatus(room.status === 'completed' ? (room.winner === 'draw' ? 'draw' : 'won') : 'playing');
-            engine.setWinner(room.winner === 'draw' ? null : (room.winner as Player | null));
-            engine.setWinningLine(room.winningLine || null);
-          }}
-          onRequireAuth={() => setIsAuthModalOpen(true)}
-        />
-      )}
-
-      {/* Google Redirect Authenticating Overlay */}
-      {redirectLoading && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center animate-in fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-4 animate-spin">
-            <span className="text-2xl">⏳</span>
-          </div>
-          <h3 className="font-display text-lg font-bold text-white mb-1">
-            Connecting Google Account...
-          </h3>
-          <p className="text-xs text-slate-400">
-            Finalizing your login and syncing your Apex challenger profile
-          </p>
-        </div>
       )}
     </div>
   );

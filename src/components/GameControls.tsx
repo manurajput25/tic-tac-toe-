@@ -39,7 +39,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
             }`}
           >
             <Bot className="w-3.5 h-3.5" />
-            <span>vs AI Bot</span>
+            <span>vs Gemini</span>
           </button>
           <button
             onClick={() => onChangeOpponent('pvp')}
@@ -118,6 +118,9 @@ export const GameControls: React.FC<GameControlsProps> = ({
         )}
         {gameMode === 'grid4x4' && (
           <span>4×4 Tactical Arena: Line up 4 in a row to win. Dominate the central quads!</span>
+        )}
+        {gameMode === 'grid6x6' && (
+          <span>6×6 Grand Arena: Align 4 consecutive marks across 36 cells. Master open ends and forks!</span>
         )}
       </div>
     </div>

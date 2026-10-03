@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { ThemeConfig, BackgroundCustomization } from '../types/game';
+import { ThemeConfig, BackgroundCustomization, Player } from '../types/game';
 
 interface ParticleBackgroundProps {
   theme: ThemeConfig;
   isDark?: boolean;
   customization?: BackgroundCustomization;
+  winningPlayer?: Player | null;
 }
 
 interface Particle {
@@ -35,6 +36,42 @@ interface TrailParticle {
   radius?: number;
 }
 
+// Victory explosion particle interface
+interface VictoryConfetti {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  width: number;
+  height: number;
+  color: string;
+  rotation: number;
+  rotationSpeed: number;
+  flipAngle: number;
+  flipSpeed: number;
+  alpha: number;
+  decay: number;
+  gravity: number;
+  drag: number;
+  wobblePhase: number;
+  wobbleSpeed: number;
+  wobbleAmp: number;
+  shape: 'rect' | 'circle' | 'star';
+  isGlowSpark?: boolean;
+}
+
+// Expanding shockwave ripple on victory
+interface VictoryShockwave {
+  x: number;
+  y: number;
+  radius: number;
+  maxRadius: number;
+  color: string;
+  alpha: number;
+  speed: number;
+  lineWidth: number;
+}
+
 const DEFAULT_BG_CUSTOMIZATION: BackgroundCustomization = {
   bgTheme: 'deep-space',
   style: 'constellation',
@@ -48,8 +85,17 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
   theme,
   isDark = true,
   customization = DEFAULT_BG_CUSTOMIZATION,
+  winningPlayer,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const explosionTriggerRef = useRef<(originX?: number, originY?: number, winner?: Player | null) => void>(() => {});
+
+  // Trigger explosion when winningPlayer prop changes to 'X' or 'O'
+  useEffect(() => {
+    if (winningPlayer) {
+      explosionTriggerRef.current(undefined, undefined, winningPlayer);
+    }
+  }, [winningPlayer]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -111,6 +157,177 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
     // Dynamic mouse/touch trail particles array
     const trailParticles: TrailParticle[] = [];
     const maxTrailCount = customization.trail === 'comet-ribbon' ? 90 : 50;
+
+    // Victory Confetti and Shockwave Collections
+    const victoryConfetti: VictoryConfetti[] = [];
+    const victoryShockwaves: VictoryShockwave[] = [];
+
+    // Confetti Palette based on Winning Player & Theme
+    const getWinPalette = (winner?: Player | null) => {
+      const primaryColor = winner === 'O' ? theme.oColor : theme.xColor;
+      const secondaryColor = winner === 'O' ? theme.xColor : theme.oColor;
+      return [
+        primaryColor,
+        secondaryColor,
+        '#f59e0b', // Radiant Gold
+        '#fbbf24', // Amber
+        '#ec4899', // Hot Pink
+        '#06b6d4', // Electric Cyan
+        '#10b981', // Emerald
+        '#a855f7', // Vivid Violet
+        '#ffffff', // Sparkle White
+      ];
+    };
+
+    // Helper to spawn a single confetti piece
+    const spawnConfettiPiece = (
+      originX: number,
+      originY: number,
+      angle: number,
+      speed: number,
+      colors: string[],
+      isRadial: boolean = false
+    ) => {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const isStar = Math.random() < 0.22;
+      const isCircle = !isStar && Math.random() < 0.25;
+      const isGlowSpark = isRadial && Math.random() < 0.4;
+
+      const baseWidth = isStar ? 9 : isCircle ? 6 : Math.random() * 6 + 6;
+      const baseHeight = isStar ? 9 : isCircle ? 6 : Math.random() * 10 + 7;
+
+      victoryConfetti.push({
+        x: originX,
+        y: originY,
+        vx: Math.cos(angle) * speed + (Math.random() - 0.5) * 2,
+        vy: Math.sin(angle) * speed + (Math.random() - 0.5) * 2,
+        width: baseWidth,
+        height: baseHeight,
+        color,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.16,
+        flipAngle: Math.random() * Math.PI * 2,
+        flipSpeed: (Math.random() * 0.18 + 0.08) * (Math.random() > 0.5 ? 1 : -1),
+        alpha: 1.0,
+        decay: Math.random() * 0.006 + 0.007,
+        gravity: isRadial ? 0.15 : 0.22,
+        drag: isRadial ? 0.94 : 0.982,
+        wobblePhase: Math.random() * Math.PI * 2,
+        wobbleSpeed: Math.random() * 0.08 + 0.04,
+        wobbleAmp: Math.random() * 1.5 + 0.8,
+        shape: isStar ? 'star' : isCircle ? 'circle' : 'rect',
+        isGlowSpark,
+      });
+    };
+
+    // Primary Victory Explosion Orchestrator
+    const triggerVictoryExplosion = (
+      customX?: number,
+      customY?: number,
+      winner?: Player | null
+    ) => {
+      const palette = getWinPalette(winner);
+      const centerX = customX ?? width / 2;
+      const centerY = customY ?? height / 2;
+      const accent = winner === 'O' ? theme.oColor : theme.xColor;
+
+      // 1. Expanding Core Shockwaves from Board Center
+      victoryShockwaves.push({
+        x: centerX,
+        y: centerY,
+        radius: 10,
+        maxRadius: Math.max(width, height) * 0.65,
+        color: accent,
+        alpha: 0.9,
+        speed: 9.5,
+        lineWidth: 5,
+      });
+
+      setTimeout(() => {
+        victoryShockwaves.push({
+          x: centerX,
+          y: centerY,
+          radius: 10,
+          maxRadius: Math.max(width, height) * 0.5,
+          color: '#fbbf24',
+          alpha: 0.85,
+          speed: 8.0,
+          lineWidth: 3.5,
+        });
+      }, 120);
+
+      // 2. Radial Nova Burst from Center (70 particles)
+      for (let i = 0; i < 70; i++) {
+        const angle = (Math.PI * 2 * i) / 70 + (Math.random() - 0.5) * 0.2;
+        const speed = Math.random() * 12 + 6;
+        spawnConfettiPiece(centerX, centerY, angle, speed, palette, true);
+      }
+
+      // 3. Left Cannon Blast (Angled upward across screen at +100ms)
+      setTimeout(() => {
+        const leftX = width * 0.12;
+        const leftY = height * 0.82;
+        victoryShockwaves.push({
+          x: leftX,
+          y: leftY,
+          radius: 8,
+          maxRadius: 280,
+          color: theme.xColor,
+          alpha: 0.75,
+          speed: 6.5,
+          lineWidth: 3,
+        });
+
+        for (let i = 0; i < 50; i++) {
+          const angle = -Math.PI / 3 + (Math.random() - 0.5) * 0.7; // ~60 degrees upward
+          const speed = Math.random() * 15 + 8;
+          spawnConfettiPiece(leftX, leftY, angle, speed, palette);
+        }
+      }, 100);
+
+      // 4. Right Cannon Blast (Angled upward across screen at +220ms)
+      setTimeout(() => {
+        const rightX = width * 0.88;
+        const rightY = height * 0.82;
+        victoryShockwaves.push({
+          x: rightX,
+          y: rightY,
+          radius: 8,
+          maxRadius: 280,
+          color: theme.oColor,
+          alpha: 0.75,
+          speed: 6.5,
+          lineWidth: 3,
+        });
+
+        for (let i = 0; i < 50; i++) {
+          const angle = (-2 * Math.PI) / 3 + (Math.random() - 0.5) * 0.7; // ~120 degrees upward
+          const speed = Math.random() * 15 + 8;
+          spawnConfettiPiece(rightX, rightY, angle, speed, palette);
+        }
+      }, 220);
+
+      // 5. Crown Shimmer Shower from Top Center at +340ms
+      setTimeout(() => {
+        for (let i = 0; i < 35; i++) {
+          const topX = width * 0.5 + (Math.random() - 0.5) * (width * 0.4);
+          const topY = -20;
+          const angle = Math.PI / 2 + (Math.random() - 0.5) * 0.8;
+          const speed = Math.random() * 6 + 2;
+          spawnConfettiPiece(topX, topY, angle, speed, palette);
+        }
+      }, 340);
+    };
+
+    // Attach to ref for prop triggers
+    explosionTriggerRef.current = triggerVictoryExplosion;
+
+    // Listen for custom event 'apex_win_explosion'
+    const handleCustomWinEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ originX?: number; originY?: number; winner?: Player | null }>;
+      triggerVictoryExplosion(customEvent.detail?.originX, customEvent.detail?.originY, customEvent.detail?.winner);
+    };
+    window.addEventListener('apex_win_explosion', handleCustomWinEvent);
 
     // Helper to spawn a trail particle
     const spawnTrailParticle = (x: number, y: number, spread: number = 1.5) => {
@@ -250,6 +467,28 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
 
     let waveTime = 0;
 
+    // Helper to draw a 5-pointed star
+    const drawStar = (context: CanvasRenderingContext2D, radius: number) => {
+      context.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const outerAngle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+        const innerAngle = outerAngle + Math.PI / 5;
+        const outerX = Math.cos(outerAngle) * radius;
+        const outerY = Math.sin(outerAngle) * radius;
+        const innerX = Math.cos(innerAngle) * (radius * 0.45);
+        const innerY = Math.sin(innerAngle) * (radius * 0.45);
+
+        if (i === 0) {
+          context.moveTo(outerX, outerY);
+        } else {
+          context.lineTo(outerX, outerY);
+        }
+        context.lineTo(innerX, innerY);
+      }
+      context.closePath();
+      context.fill();
+    };
+
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
@@ -266,7 +505,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
 
       // 1. Render Background Engine Modes
       if (customization.style === 'cyber-grid') {
-        // Perspective 3D cyber grid with animated forward rolling motion
         const horizon = height * 0.58;
         const lineCount = 18;
         const gridAlpha = isDark ? 0.35 : 0.2;
@@ -274,7 +512,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
         ctx.strokeStyle = theme.xColor;
         ctx.lineWidth = 1.2;
 
-        // Radiating perspective lines from horizon center
         for (let i = -lineCount; i <= lineCount; i++) {
           const xBottom = width / 2 + i * (width / 12);
           ctx.beginPath();
@@ -284,7 +521,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           ctx.stroke();
         }
 
-        // Animated forward moving horizontal lines
         const travel = (waveTime * 35) % 1;
         const totalHorizontal = 10;
         for (let j = 1; j <= totalHorizontal; j++) {
@@ -297,7 +533,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           ctx.stroke();
         }
 
-        // Horizon radiant glow
         const horizonGrad = ctx.createLinearGradient(0, horizon - 40, 0, horizon + 20);
         horizonGrad.addColorStop(0, 'transparent');
         horizonGrad.addColorStop(0.7, theme.xColor);
@@ -306,7 +541,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
         ctx.globalAlpha = isDark ? 0.18 : 0.08;
         ctx.fillRect(0, horizon - 40, width, 60);
 
-        // Sky ambient stars
         for (let i = 0; i < Math.floor(particles.length * 0.6); i++) {
           const p = particles[i];
           const px = ((p.x + width) % width);
@@ -318,7 +552,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           ctx.fill();
         }
       } else if (customization.style === 'aurora-waves') {
-        // Chromatic fluid ribbons with rich gradients
         for (let w = 0; w < 4; w++) {
           ctx.beginPath();
           ctx.moveTo(0, height * (0.25 + w * 0.14));
@@ -336,7 +569,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           ctx.stroke();
         }
 
-        // Ambient floating glitter
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
           p.y -= 0.3 * speedMult;
@@ -348,7 +580,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           ctx.fill();
         }
       } else if (customization.style === 'warp-speed') {
-        // Hyperspace 3D starfield with light streaking lines
         const cx = width / 2;
         const cy = height / 2;
 
@@ -381,7 +612,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           if (px >= 0 && px <= width && py >= 0 && py <= height) {
             const alpha = Math.min(1, Math.max(0.15, (1 - p.z / width) * 1.2));
 
-            // Draw streak tail
             ctx.beginPath();
             ctx.moveTo(prevX, prevY);
             ctx.lineTo(px, py);
@@ -390,7 +620,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
             ctx.globalAlpha = isDark ? alpha : alpha * 0.7;
             ctx.stroke();
 
-            // Head star
             ctx.beginPath();
             ctx.arc(px, py, Math.max(1, (1 - p.z / width) * 2.5), 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
@@ -403,7 +632,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
 
-          // Wrap around canvas coords
           if (p.x < 0) p.x += width;
           if (p.x > width) p.x -= width;
           if (p.y < 0) p.y += height;
@@ -437,7 +665,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
           ctx.globalAlpha = isDark ? currentAlpha : currentAlpha * 0.85;
           ctx.fill();
 
-          // Draw links only in 'constellation' mode
           if (customization.style === 'constellation') {
             for (let j = i + 1; j < particles.length; j++) {
               const p2 = particles[j];
@@ -506,6 +733,83 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
         }
       }
 
+      // 3. Draw Victory Shockwaves
+      for (let i = victoryShockwaves.length - 1; i >= 0; i--) {
+        const sw = victoryShockwaves[i];
+        sw.radius += sw.speed;
+        sw.alpha = Math.max(0, 1 - sw.radius / sw.maxRadius);
+
+        if (sw.alpha <= 0.01 || sw.radius >= sw.maxRadius) {
+          victoryShockwaves.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = sw.color;
+        ctx.lineWidth = sw.lineWidth * sw.alpha;
+        ctx.globalAlpha = sw.alpha * 0.8;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = sw.color;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 4. Draw & Animate Victory Confetti / Fireworks
+      if (victoryConfetti.length > 0) {
+        for (let i = victoryConfetti.length - 1; i >= 0; i--) {
+          const c = victoryConfetti[i];
+
+          // Physics integration
+          c.vx *= c.drag;
+          c.vy *= c.drag;
+          c.vy += c.gravity;
+
+          c.wobblePhase += c.wobbleSpeed;
+          c.x += c.vx + Math.sin(c.wobblePhase) * c.wobbleAmp;
+          c.y += c.vy;
+
+          c.rotation += c.rotationSpeed;
+          c.flipAngle += c.flipSpeed;
+          c.alpha -= c.decay;
+
+          // Out of screen or faded
+          if (c.alpha <= 0 || c.y > height + 40) {
+            victoryConfetti.splice(i, 1);
+            continue;
+          }
+
+          // 3D paper flutter simulation
+          const flipScale = Math.cos(c.flipAngle);
+
+          ctx.save();
+          ctx.translate(c.x, c.y);
+          ctx.rotate(c.rotation);
+          ctx.scale(flipScale, 1);
+          ctx.globalAlpha = Math.max(0, Math.min(1, c.alpha));
+          ctx.fillStyle = c.color;
+
+          if (c.isGlowSpark) {
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = c.color;
+          }
+
+          if (c.shape === 'star') {
+            drawStar(ctx, c.width * 0.8);
+          } else if (c.shape === 'circle') {
+            ctx.beginPath();
+            ctx.arc(0, 0, c.width * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            // Rectangular ribbon
+            ctx.fillRect(-c.width / 2, -c.height / 2, c.width, c.height);
+          }
+
+          ctx.restore();
+        }
+      }
+
       ctx.globalAlpha = 1;
       animationFrameId = requestAnimationFrame(render);
     };
@@ -521,6 +825,7 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('touchstart', handlePointerDown);
+      window.removeEventListener('apex_win_explosion', handleCustomWinEvent);
     };
   }, [
     theme.id,

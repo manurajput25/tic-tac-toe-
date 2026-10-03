@@ -14,65 +14,35 @@ export const WinningLine: React.FC<WinningLineProps> = ({
   theme,
   winner,
 }) => {
-  const is4x4 = mode === 'grid4x4';
   const color = winner === 'X' ? theme.xColor : theme.oColor;
   const glow = winner === 'X' ? theme.xGlow : theme.oGlow;
 
-  let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+  const size = mode === 'grid6x6' ? 6 : mode === 'grid4x4' ? 4 : 3;
+  const first = winningLine.indices[0];
+  const last = winningLine.indices[winningLine.indices.length - 1];
 
-  if (!is4x4) {
-    // 3x3 Grid (positions in percentages 0..100)
-    const rowY = [16.66, 50, 83.33];
-    const colX = [16.66, 50, 83.33];
+  const getCellCenter = (idx: number) => {
+    const col = idx % size;
+    const row = Math.floor(idx / size);
+    return {
+      x: ((col + 0.5) / size) * 100,
+      y: ((row + 0.5) / size) * 100,
+    };
+  };
 
-    if (winningLine.direction === 'horizontal') {
-      const r = winningLine.rowOrCol ?? Math.floor(winningLine.indices[0] / 3);
-      y1 = y2 = rowY[r];
-      x1 = 6;
-      x2 = 94;
-    } else if (winningLine.direction === 'vertical') {
-      const c = winningLine.rowOrCol ?? (winningLine.indices[0] % 3);
-      x1 = x2 = colX[c];
-      y1 = 6;
-      y2 = 94;
-    } else if (winningLine.direction === 'diagonal-main') {
-      x1 = 8;
-      y1 = 8;
-      x2 = 92;
-      y2 = 92;
-    } else {
-      x1 = 92;
-      y1 = 8;
-      x2 = 8;
-      y2 = 92;
-    }
-  } else {
-    // 4x4 Grid
-    const rowY = [12.5, 37.5, 62.5, 87.5];
-    const colX = [12.5, 37.5, 62.5, 87.5];
+  const start = getCellCenter(first);
+  const end = getCellCenter(last);
 
-    if (winningLine.direction === 'horizontal') {
-      const r = winningLine.rowOrCol ?? Math.floor(winningLine.indices[0] / 4);
-      y1 = y2 = rowY[r];
-      x1 = 5;
-      x2 = 95;
-    } else if (winningLine.direction === 'vertical') {
-      const c = winningLine.rowOrCol ?? (winningLine.indices[0] % 4);
-      x1 = x2 = colX[c];
-      y1 = 5;
-      y2 = 95;
-    } else if (winningLine.direction === 'diagonal-main') {
-      x1 = 6;
-      y1 = 6;
-      x2 = 94;
-      y2 = 94;
-    } else {
-      x1 = 94;
-      y1 = 6;
-      x2 = 6;
-      y2 = 94;
-    }
-  }
+  // Extend line slightly past endpoints for dramatic laser finish
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const extension = size === 6 ? 2.5 : size === 4 ? 4 : 5.5;
+
+  const x1 = start.x - (dx / dist) * extension;
+  const y1 = start.y - (dy / dist) * extension;
+  const x2 = end.x + (dx / dist) * extension;
+  const y2 = end.y + (dy / dist) * extension;
 
   return (
     <svg
@@ -98,22 +68,34 @@ export const WinningLine: React.FC<WinningLineProps> = ({
         x2={x2}
         y2={y2}
         stroke={glow}
-        strokeWidth="6"
+        strokeWidth={size === 6 ? 6 : 8}
         strokeLinecap="round"
-        className="animate-draw"
+        filter="url(#glow-strike)"
+        className="opacity-70 animate-strike-glow"
       />
 
-      {/* Foreground sharp strike stroke */}
+      {/* Primary colored core */}
       <line
         x1={x1}
         y1={y1}
         x2={x2}
         y2={y2}
         stroke={color}
-        strokeWidth="3.5"
+        strokeWidth={size === 6 ? 3.5 : 4.5}
         strokeLinecap="round"
-        filter="url(#glow-strike)"
-        className="animate-draw"
+        className="animate-strike-core"
+      />
+
+      {/* White laser core reflection */}
+      <line
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke="#ffffff"
+        strokeWidth={size === 6 ? 1.5 : 2}
+        strokeLinecap="round"
+        className="opacity-95"
       />
     </svg>
   );

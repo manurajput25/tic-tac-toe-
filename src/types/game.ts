@@ -1,7 +1,7 @@
 export type Player = 'X' | 'O';
 export type CellValue = Player | null;
 
-export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4';
+export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4' | 'grid6x6';
 export type OpponentType = 'bot' | 'pvp';
 export type BotDifficulty = 'easy' | 'medium' | 'unbeatable';
 
