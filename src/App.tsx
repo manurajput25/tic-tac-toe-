@@ -33,6 +33,18 @@ import { GameSettingsModal } from './components/GameSettingsModal';
 import { RulesModal } from './components/RulesModal';
 import { StatsModal } from './components/StatsModal';
 import { ParticleBackground } from './components/ParticleBackground';
+import { useAuth } from './context/AuthContext';
+import { MatchRoom } from './types/user';
+import { AuthModal } from './components/AuthModal';
+import { ProfileModal } from './components/ProfileModal';
+import { OnlineLobbyModal } from './components/OnlineLobbyModal';
+import { OnlineMatchBanner } from './components/OnlineMatchBanner';
+import {
+  subscribeToRoom,
+  makeOnlineMove,
+  leaveOnlineRoom,
+  resetOnlineMatch,
+} from './services/multiplayerService';
 import { Sparkles, Trophy, Lightbulb } from 'lucide-react';
 
 const SCORE_STORAGE_KEY = 'apex_ttt_scores_v1';
@@ -74,8 +86,32 @@ export default function App() {
   const [blitzDuration, setBlitzDuration] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => sound.getMuted());
 
+  // Subtle screen-wide atmosphere transition state
+  const [transitionKey, setTransitionKey] = useState<number>(0);
+  const [transitionColor, setTransitionColor] = useState<string>('#06b6d4');
+  const isInitialMount = useRef<boolean>(true);
+
   // Compute active dark mode state
   const isDarkMode = colorMode === 'dark' || (colorMode === 'system' && systemPrefersDark);
+
+  // Trigger subtle screen-wide transition overlay on theme or background customization change
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const color = THEMES[themeId]?.xColor || '#06b6d4';
+    setTransitionColor(color);
+    setTransitionKey((prev) => prev + 1);
+  }, [
+    themeId,
+    colorMode,
+    boardCustomization.style,
+    boardCustomization.cellFinish,
+    boardCustomization.markStyle,
+    backgroundCustomization.bgTheme,
+    backgroundCustomization.style,
+  ]);
 
   // Sync document root and body classes
   useEffect(() => {
@@ -136,6 +172,14 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isStatsOpen, setIsStatsOpen] = useState<boolean>(false);
+
+  // User Profile & Online Multiplayer States
+  const { user, profile, recordGameResult } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isOnlineLobbyOpen, setIsOnlineLobbyOpen] = useState<boolean>(false);
+  const [activeOnlineRoom, setActiveOnlineRoom] = useState<MatchRoom | null>(null);
+  const [localPlayerMark, setLocalPlayerMark] = useState<Player>('X');
 
   // Current theme config
   const currentTheme = THEMES[themeId] || THEMES['cyber-neon'];
@@ -271,6 +315,77 @@ export default function App() {
     sound.playClick();
     setMode(newMode);
     startNewRound(newMode);
+  };
+
+  // Subscribe to real-time online match updates
+  useEffect(() => {
+    if (!activeOnlineRoom) return;
+
+    const unsubscribe = subscribeToRoom(activeOnlineRoom.id, (updatedRoom) => {
+      if (!updatedRoom || updatedRoom.status === 'abandoned') {
+        setActiveOnlineRoom(null);
+        startNewRound();
+        return;
+      }
+
+      setActiveOnlineRoom(updatedRoom);
+      setBoard(updatedRoom.board);
+      setCurrentPlayer(updatedRoom.currentTurn);
+      if (updatedRoom.xPieceIndices) setXPieceIndices(updatedRoom.xPieceIndices);
+      if (updatedRoom.oPieceIndices) setOPieceIndices(updatedRoom.oPieceIndices);
+
+      if (updatedRoom.winner !== undefined && updatedRoom.winner !== null) {
+        setWinner(updatedRoom.winner === 'draw' ? null : updatedRoom.winner);
+        setStatus(updatedRoom.winner === 'draw' ? 'draw' : 'won');
+        setWinningLine(updatedRoom.winningLine || null);
+
+        // Record stats once when game concludes
+        if (updatedRoom.status === 'completed' && status !== 'won' && status !== 'draw') {
+          if (updatedRoom.winner === localPlayerMark) {
+            triggerConfetti();
+            sound.playWin();
+            recordGameResult('win');
+          } else if (updatedRoom.winner === 'draw') {
+            sound.playDraw();
+            recordGameResult('draw');
+          } else {
+            sound.playDefeat();
+            recordGameResult('loss');
+          }
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeOnlineRoom?.id, localPlayerMark, status]);
+
+  const handleEnterOnlineMatch = (room: MatchRoom) => {
+    sound.playClick();
+    setActiveOnlineRoom(room);
+    const mark: Player = user && user.uid === room.hostId ? 'X' : 'O';
+    setLocalPlayerMark(mark);
+    setMode(room.mode);
+    setBoard(room.board);
+    setCurrentPlayer(room.currentTurn);
+    setStatus(room.status === 'completed' ? (room.winner === 'draw' ? 'draw' : 'won') : 'playing');
+    setWinner(room.winner === 'draw' ? null : (room.winner as Player | null) || null);
+    setWinningLine(room.winningLine || null);
+  };
+
+  const handleLeaveOnlineMatch = async () => {
+    sound.playClick();
+    if (activeOnlineRoom && user) {
+      await leaveOnlineRoom(activeOnlineRoom.id, user.uid);
+    }
+    setActiveOnlineRoom(null);
+    startNewRound();
+  };
+
+  const handleOnlineRematch = async () => {
+    sound.playClick();
+    if (activeOnlineRoom) {
+      await resetOnlineMatch(activeOnlineRoom.id, activeOnlineRoom.mode);
+    }
   };
 
   // Handle Blitz countdown
@@ -432,6 +547,65 @@ export default function App() {
 
   // Human click cell
   const handleCellClick = (index: number) => {
+    // Online Multiplayer Match Move
+    if (activeOnlineRoom) {
+      if (activeOnlineRoom.status !== 'playing') return;
+      if (activeOnlineRoom.currentTurn !== localPlayerMark) return; // Not your turn!
+      if (board[index] !== null) return;
+
+      const newBoard = [...board];
+      newBoard[index] = localPlayerMark;
+
+      let newXPieces = [...xPieceIndices];
+      let newOPieces = [...oPieceIndices];
+
+      if (mode === 'infinite3') {
+        if (localPlayerMark === 'X') {
+          if (newXPieces.length >= 3) {
+            const oldest = newXPieces.shift()!;
+            newBoard[oldest] = null;
+            sound.playDisappear();
+          }
+          newXPieces.push(index);
+        } else {
+          if (newOPieces.length >= 3) {
+            const oldest = newOPieces.shift()!;
+            newBoard[oldest] = null;
+            sound.playDisappear();
+          }
+          newOPieces.push(index);
+        }
+      }
+
+      sound.playMove(localPlayerMark);
+
+      const winResult = checkWin(newBoard, mode);
+      const isFull = isBoardFull(newBoard);
+      const nextTurn: Player = localPlayerMark === 'X' ? 'O' : 'X';
+
+      let winVal: Player | 'draw' | null = null;
+      let lineVal: WinningLineType | null = null;
+
+      if (winResult) {
+        winVal = localPlayerMark;
+        lineVal = winResult;
+      } else if (isFull && mode !== 'infinite3') {
+        winVal = 'draw';
+      }
+
+      makeOnlineMove(
+        activeOnlineRoom.id,
+        newBoard,
+        nextTurn,
+        index,
+        newXPieces,
+        newOPieces,
+        winVal,
+        lineVal
+      );
+      return;
+    }
+
     if (status !== 'playing' || isBotThinking) return;
     if (board[index] !== null) return;
     if (opponent === 'bot' && currentPlayer !== 'X') return;
@@ -610,10 +784,25 @@ export default function App() {
         </div>
       )}
 
+      {/* Subtle Screen-Wide Atmosphere Transition Bloom */}
+      {transitionKey > 0 && (
+        <div
+          key={transitionKey}
+          className="fixed inset-0 pointer-events-none z-30 animate-theme-bloom"
+          aria-hidden="true"
+          style={{
+            background: `radial-gradient(circle at 50% 50%, ${transitionColor}44 0%, ${transitionColor}18 50%, transparent 80%)`,
+          }}
+        />
+      )}
+
       {/* Top Bar Navigation */}
       <Navbar
         currentMode={mode}
-        onSelectMode={handleSelectMode}
+        onSelectMode={(newMode) => {
+          if (activeOnlineRoom) return;
+          handleSelectMode(newMode);
+        }}
         isMuted={isMuted}
         onToggleMute={() => {
           const muted = sound.toggleMute();
@@ -622,8 +811,12 @@ export default function App() {
         colorMode={colorMode}
         onCycleColorMode={handleCycleColorMode}
         onResetGame={() => {
-          sound.playClick();
-          startNewRound();
+          if (activeOnlineRoom) {
+            handleOnlineRematch();
+          } else {
+            sound.playClick();
+            startNewRound();
+          }
         }}
         onOpenSettings={() => {
           sound.playClick();
@@ -637,15 +830,39 @@ export default function App() {
           sound.playClick();
           setIsStatsOpen(true);
         }}
+        onOpenAuth={() => {
+          sound.playClick();
+          setIsAuthModalOpen(true);
+        }}
+        onOpenProfile={() => {
+          sound.playClick();
+          setIsProfileModalOpen(true);
+        }}
+        onOpenOnlineLobby={() => {
+          sound.playClick();
+          setIsOnlineLobbyOpen(true);
+        }}
+        isOnlineActive={!!activeOnlineRoom}
       />
 
       {/* Main Game Arena */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 sm:py-8 max-w-4xl mx-auto w-full">
+        {/* Active Online Multiplayer Battle Banner */}
+        {activeOnlineRoom && (
+          <OnlineMatchBanner
+            room={activeOnlineRoom}
+            localPlayerMark={localPlayerMark}
+            isMyTurn={activeOnlineRoom.currentTurn === localPlayerMark}
+            onLeaveRoom={handleLeaveOnlineMatch}
+            onRematch={handleOnlineRematch}
+          />
+        )}
+
         {/* HUD Scoreboard */}
         <ScoreBoard
           score={score}
           currentPlayer={currentPlayer}
-          opponent={opponent}
+          opponent={activeOnlineRoom ? 'pvp' : opponent}
           botDifficulty={botDifficulty}
           theme={currentTheme}
           blitzTimeLeft={blitzTimeLeft}
@@ -811,6 +1028,31 @@ export default function App() {
             localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(resetScore));
           }}
           onClose={() => setIsStatsOpen(false)}
+        />
+      )}
+
+      {/* User Login & Authentication Modal */}
+      {isAuthModalOpen && (
+        <AuthModal
+          onClose={() => setIsAuthModalOpen(false)}
+          onSuccess={() => setIsProfileModalOpen(true)}
+        />
+      )}
+
+      {/* User Profile & ID Customizer Modal */}
+      {isProfileModalOpen && (
+        <ProfileModal
+          onClose={() => setIsProfileModalOpen(false)}
+          onOpenOnlineLobby={() => setIsOnlineLobbyOpen(true)}
+        />
+      )}
+
+      {/* Online Multiplayer Matchmaking Lobby */}
+      {isOnlineLobbyOpen && (
+        <OnlineLobbyModal
+          onClose={() => setIsOnlineLobbyOpen(false)}
+          onEnterOnlineMatch={handleEnterOnlineMatch}
+          onRequireAuth={() => setIsAuthModalOpen(true)}
         />
       )}
     </div>

@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profiles Collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && isValidId(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidId(userId)
+        && incoming().uid == request.auth.uid
+        && incoming().username is string && incoming().username.size() >= 2 && incoming().username.size() <= 30
+        && incoming().displayName is string && incoming().displayName.size() >= 1 && incoming().displayName.size() <= 60;
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidId(userId)
+        && incoming().uid == existing().uid
+        && incoming().username is string && incoming().username.size() >= 2 && incoming().username.size() <= 30
+        && incoming().displayName is string && incoming().displayName.size() >= 1 && incoming().displayName.size() <= 60;
+      allow delete: if false;
+    }
+
+    // Multiplayer Match Rooms Collection
+    match /rooms/{roomId} {
+      allow read: if isSignedIn() && isValidId(roomId);
+      allow create: if isSignedIn() && isValidId(roomId)
+        && incoming().hostId == request.auth.uid
+        && incoming().mode in ['classic3x3', 'infinite3', 'grid4x4']
+        && incoming().status in ['waiting', 'playing', 'completed', 'abandoned']
+        && incoming().board is list;
+      allow update: if isSignedIn() && isValidId(roomId)
+        && (existing().hostId == request.auth.uid || existing().guestId == request.auth.uid || existing().guestId == null)
+        && incoming().hostId == existing().hostId
+        && incoming().board is list;
+      allow delete: if isSignedIn() && isValidId(roomId)
+        && existing().hostId == request.auth.uid;
+    }
+  }
+}

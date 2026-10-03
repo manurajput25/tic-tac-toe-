@@ -140,6 +140,33 @@ class SoundEngine {
     });
   }
 
+  public playDefeat() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx) return;
+
+    const notes = [440, 392, 349.23, 293.66];
+    const now = this.ctx.currentTime;
+
+    notes.forEach((freq, i) => {
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+
+      gain.gain.setValueAtTime(0.08, now + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.25);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.26);
+    });
+  }
+
   public playClick() {
     if (this.isMuted) return;
     this.initContext();

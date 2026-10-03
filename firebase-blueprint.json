@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public user profile and stats for matchmaking and identification",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Auth UID" },
+        "username": { "type": "string", "description": "Custom chosen unique handle", "maxLength": 30 },
+        "displayName": { "type": "string", "description": "Public display name", "maxLength": 60 },
+        "photoURL": { "type": "string", "description": "Avatar URL or preset avatar icon key" },
+        "email": { "type": "string", "description": "User email address if authenticated via Google" },
+        "phoneNumber": { "type": "string", "description": "Phone number if authenticated via phone OTP" },
+        "totalGames": { "type": "number", "description": "Total matches played" },
+        "wins": { "type": "number", "description": "Matches won" },
+        "losses": { "type": "number", "description": "Matches lost" },
+        "draws": { "type": "number", "description": "Matches drawn" },
+        "bestStreak": { "type": "number", "description": "Highest win streak" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last profile update timestamp" }
+      },
+      "required": ["uid", "username", "displayName"]
+    },
+    "MatchRoom": {
+      "title": "MatchRoom",
+      "description": "Online real-time multiplayer match room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Room ID or 6-digit code" },
+        "mode": { "type": "string", "description": "Game mode: classic3x3, infinite3, or grid4x4" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "completed", "abandoned"], "description": "Room match status" },
+        "hostId": { "type": "string", "description": "UID of the player who created the room" },
+        "hostName": { "type": "string", "description": "Name of host player" },
+        "hostMark": { "type": "string", "enum": ["X", "O"], "description": "Host player mark" },
+        "guestId": { "type": "string", "description": "UID of the opponent player who joined" },
+        "guestName": { "type": "string", "description": "Name of opponent player" },
+        "guestMark": { "type": "string", "enum": ["X", "O"], "description": "Guest player mark" },
+        "currentTurn": { "type": "string", "enum": ["X", "O"], "description": "Player whose turn it is" },
+        "board": { "type": "array", "description": "Current board state array" },
+        "lastMoveIndex": { "type": "number", "description": "Cell index of the last placed move" },
+        "winner": { "type": "string", "description": "Winner of match ('X', 'O', 'draw', or null)" },
+        "winningIndices": { "type": "array", "description": "Indices forming winning line" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Room creation time" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Room state last updated" }
+      },
+      "required": ["id", "mode", "status", "hostId", "hostName", "hostMark", "currentTurn", "board"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles indexed by UID"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/MatchRoom" },
+      "description": "Multiplayer match rooms"
+    }
+  }
+}

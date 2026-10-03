@@ -53,3 +53,43 @@
 .animate-fade-warning {
   animation: pulseSubtle 1.2s infinite ease-in-out;
 }
+
+/* Subtle Screen-Wide Theme Transition Overlay */
+@keyframes themeTransitionBloom {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    transform: scale(0.99);
+  }
+  30% {
+    opacity: 0.38;
+    backdrop-filter: blur(2px);
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    transform: scale(1.01);
+  }
+}
+
+.animate-theme-bloom {
+  animation: themeTransitionBloom 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Sleek Custom Scrollbar for Workshop Dialog */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.6);
+}
+
