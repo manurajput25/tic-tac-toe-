@@ -47,7 +47,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // If not logged in, show prompt
-  if (!user || !profile) {
+  if (!profile) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
         <div className="relative w-full max-w-sm p-6 bg-slate-900 border border-slate-700/80 rounded-[32px] shadow-2xl text-center text-slate-100">

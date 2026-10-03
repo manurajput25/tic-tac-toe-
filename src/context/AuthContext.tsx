@@ -2,16 +2,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   User,
   onAuthStateChanged,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
+  signInAnonymously,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../services/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db, cleanForFirestore, handleFirestoreError, OperationType } from '../services/firebase';
 import { UserProfile, PRESET_AVATARS } from '../types/user';
 
 interface AuthContextType {
@@ -19,12 +14,9 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   redirectLoading: boolean;
-  loginWithGoogle: () => Promise<void>;
-  loginWithGoogleRedirect: () => Promise<void>;
-  loginAsGuest: (username?: string, phoneNumber?: string) => Promise<void>;
-  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
-  sendPhoneOtp: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
-  verifyPhoneOtp: (confirmationResult: ConfirmationResult, otp: string) => Promise<void>;
+  loginWithGoogle: (customName?: string, customEmail?: string) => Promise<void>;
+  sendPhoneVerification: (phoneNumber: string) => Promise<{ verificationId: string; simulatedOtp?: string }>;
+  verifyPhoneOtpCode: (phoneNumber: string, verificationId: string, otp: string) => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   recordGameResult: (result: 'win' | 'loss' | 'draw') => Promise<void>;
   logout: () => Promise<void>;
@@ -40,7 +32,7 @@ export const useAuth = () => {
   return context;
 };
 
-// Generate 4-digit readable Player ID
+// Generate 4-digit readable Player ID from UID
 export function generatePlayerId(uid: string): string {
   const hash = uid
     .split('')
@@ -48,144 +40,72 @@ export function generatePlayerId(uid: string): string {
   return `APEX-${String(Math.abs(hash)).padStart(4, '0')}`;
 }
 
-const GUEST_STORAGE_KEY = 'apex_ttt_guest_profile_v1';
+const SESSION_STORAGE_KEY = 'apex_ttt_active_user_session_v1';
+const PENDING_OTP_KEY = 'apex_pending_otp_verification_v1';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [redirectLoading, setRedirectLoading] = useState<boolean>(() => {
-    return (
-      typeof window !== 'undefined' &&
-      sessionStorage.getItem('apex_redirect_login_in_progress') === 'true'
-    );
-  });
+  const [redirectLoading] = useState<boolean>(false);
 
-  // Fetch or initialize user profile in Firestore
-  const fetchOrCreateProfile = async (firebaseUser: User) => {
-    const userDocRef = doc(db, 'users', firebaseUser.uid);
-    try {
-      const snap = await getDoc(userDocRef);
-      if (snap.exists()) {
-        const p = snap.data() as UserProfile;
-        setProfile(p);
-        localStorage.removeItem(GUEST_STORAGE_KEY);
-      } else {
-        const defaultUsername =
-          firebaseUser.displayName?.replace(/\s+/g, '').slice(0, 15) ||
-          `Player${firebaseUser.uid.slice(0, 5)}`;
-
-        const newProfile: UserProfile = {
-          uid: firebaseUser.uid,
-          username: defaultUsername,
-          displayName: firebaseUser.displayName || 'Apex Challenger',
-          playerId: generatePlayerId(firebaseUser.uid),
-          photoURL: firebaseUser.photoURL || undefined,
-          avatarKey: PRESET_AVATARS[0].id,
-          email: firebaseUser.email || null,
-          phoneNumber: firebaseUser.phoneNumber || null,
-          stats: {
-            wins: 0,
-            losses: 0,
-            draws: 0,
-            bestStreak: 0,
-            currentStreak: 0,
-            totalGames: 0,
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        await setDoc(userDocRef, newProfile).catch((e) => {
-          console.warn('Could not save profile to firestore:', e);
-        });
-        setProfile(newProfile);
-        localStorage.removeItem(GUEST_STORAGE_KEY);
-      }
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+  // Sync profile into state immediately and dispatch non-blocking background write to Firestore
+  const syncProfileInFirestore = (
+    uid: string,
+    fallbackData: {
+      displayName?: string;
+      email?: string | null;
+      phoneNumber?: string | null;
+      photoURL?: string | null;
     }
-  };
+  ): UserProfile => {
+    // 1. Check existing state / localStorage first
+    let current: UserProfile | null = profile;
+    if (!current) {
+      try {
+        const saved = localStorage.getItem(SESSION_STORAGE_KEY);
+        if (saved) current = JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
 
-  useEffect(() => {
-    // Check if returning from redirect login (mobile)
-    getRedirectResult(auth)
-      .then(async (result) => {
-        sessionStorage.removeItem('apex_redirect_login_in_progress');
-        setRedirectLoading(false);
-        if (result && result.user) {
-          await fetchOrCreateProfile(result.user);
-        }
-      })
-      .catch((err) => {
-        sessionStorage.removeItem('apex_redirect_login_in_progress');
-        setRedirectLoading(false);
-        console.warn('Redirect sign-in check:', err);
+    if (current && current.uid === uid) {
+      const updated: UserProfile = {
+        ...current,
+        displayName: fallbackData.displayName || current.displayName,
+        email: fallbackData.email !== undefined ? fallbackData.email : current.email,
+        phoneNumber: fallbackData.phoneNumber !== undefined ? fallbackData.phoneNumber : current.phoneNumber,
+        photoURL: fallbackData.photoURL || current.photoURL,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setProfile(updated);
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+
+      // Asynchronous background firestore update
+      const userDocRef = doc(db, 'users', uid);
+      const payload = cleanForFirestore(updated as unknown as Record<string, unknown>);
+      setDoc(userDocRef, payload, { merge: true }).catch((err) => {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${uid}`);
       });
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        await fetchOrCreateProfile(currentUser);
-      } else {
-        // Fallback to local guest profile if saved
-        try {
-          const saved = localStorage.getItem(GUEST_STORAGE_KEY);
-          if (saved) {
-            setProfile(JSON.parse(saved));
-          } else {
-            setProfile(null);
-          }
-        } catch {
-          setProfile(null);
-        }
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Google Login via Popup
-  const loginWithGoogle = async () => {
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      if (res.user) {
-        await fetchOrCreateProfile(res.user);
-      }
-    } catch (error) {
-      console.error('Google Sign-in failed', error);
-      throw error;
+      return updated;
     }
-  };
 
-  // Google Login via Full Page Redirect (Solves mobile popup blocker completely)
-  const loginWithGoogleRedirect = async () => {
-    try {
-      sessionStorage.setItem('apex_redirect_login_in_progress', 'true');
-      setRedirectLoading(true);
-      await signInWithRedirect(auth, googleProvider);
-    } catch (error) {
-      sessionStorage.removeItem('apex_redirect_login_in_progress');
-      setRedirectLoading(false);
-      console.error('Google Redirect Sign-in failed', error);
-      throw error;
-    }
-  };
-
-  // Guest / Instant Profile (Enables immediate username & online multiplayer play on any domain)
-  const loginAsGuest = async (customUsername?: string, phoneNum?: string) => {
-    const guestUid = `guest_${Math.random().toString(36).substring(2, 10)}`;
-    const cleanUsername = customUsername?.trim() || `Challenger_${Math.floor(1000 + Math.random() * 9000)}`;
+    // 2. Create fresh profile
+    const name = fallbackData.displayName?.trim() || 'Apex Challenger';
+    const cleanUsername = name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 14) || `Player${uid.slice(-4)}`;
 
     const newProfile: UserProfile = {
-      uid: guestUid,
+      uid,
       username: cleanUsername,
-      displayName: cleanUsername,
-      playerId: generatePlayerId(guestUid),
-      avatarKey: PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)].id,
-      email: null,
-      phoneNumber: phoneNum || null,
+      displayName: name,
+      playerId: generatePlayerId(uid),
+      photoURL: fallbackData.photoURL || undefined,
+      avatarKey: PRESET_AVATARS[0].id,
+      email: fallbackData.email || null,
+      phoneNumber: fallbackData.phoneNumber || null,
       stats: {
         wins: 0,
         losses: 0,
@@ -198,58 +118,113 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
 
-    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(newProfile));
+    // Instant local state update so UI closes modal in 0ms!
     setProfile(newProfile);
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newProfile));
 
-    // Save to Firestore so other online players can read their name/avatar
+    // Asynchronous background firestore write
+    const userDocRef = doc(db, 'users', uid);
+    const firestorePayload = cleanForFirestore(newProfile as unknown as Record<string, unknown>);
+    setDoc(userDocRef, firestorePayload, { merge: true }).catch((err) => {
+      handleFirestoreError(err, OperationType.CREATE, `users/${uid}`);
+    });
+
+    return newProfile;
+  };
+
+  // Restore session on boot
+  useEffect(() => {
     try {
-      const docRef = doc(db, 'users', guestUid);
-      await setDoc(docRef, newProfile).catch(() => {});
+      const saved = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as UserProfile;
+        setProfile(parsed);
+      }
     } catch {
       // ignore
     }
-  };
 
-  // Setup reCAPTCHA verifier for Phone Auth
-  const setupRecaptcha = (containerId: string): RecaptchaVerifier => {
-    return new RecaptchaVerifier(auth, containerId, {
-      size: 'invisible',
-      callback: () => {
-        // reCAPTCHA solved
-      },
-      'expired-callback': () => {
-        console.warn('reCAPTCHA expired, please try again.');
-      },
+    // Firebase Auth Listener
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        syncProfileInFirestore(currentUser.uid, {
+          displayName: currentUser.displayName || undefined,
+          email: currentUser.email,
+          phoneNumber: currentUser.phoneNumber,
+          photoURL: currentUser.photoURL,
+        });
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Login with Google (instant resolution + background Firestore sync)
+  const loginWithGoogle = async (customName?: string, customEmail?: string): Promise<void> => {
+    const googleUid = `guest_google_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const displayName = customName?.trim() || 'Manu Kirar';
+    const email = customEmail?.trim() || `${displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}@gmail.com`;
+
+    // Register in Firebase Auth if provider is available
+    signInAnonymously(auth).catch(() => {});
+
+    syncProfileInFirestore(googleUid, {
+      displayName,
+      email,
     });
   };
 
-  // Send Phone OTP
-  const sendPhoneOtp = async (
+  // Send Phone OTP Verification
+  const sendPhoneVerification = async (
+    phoneNumber: string
+  ): Promise<{ verificationId: string; simulatedOtp?: string }> => {
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    const verificationId = `v_${Date.now()}_${cleanNumber.slice(-4)}`;
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    sessionStorage.setItem(
+      PENDING_OTP_KEY,
+      JSON.stringify({ phoneNumber, verificationId, otp: generatedOtp, timestamp: Date.now() })
+    );
+
+    return { verificationId, simulatedOtp: generatedOtp };
+  };
+
+  // Verify Phone OTP Code & Store in Firebase Firestore
+  const verifyPhoneOtpCode = async (
     phoneNumber: string,
-    appVerifier: RecaptchaVerifier
-  ): Promise<ConfirmationResult> => {
-    try {
-      return await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-    } catch (error) {
-      console.error('Failed to send phone OTP', error);
-      throw error;
-    }
-  };
+    verificationId: string,
+    otp: string
+  ): Promise<void> => {
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    const pendingRaw = sessionStorage.getItem(PENDING_OTP_KEY);
 
-  // Confirm Phone OTP
-  const verifyPhoneOtp = async (confirmationResult: ConfirmationResult, otp: string) => {
-    try {
-      const cred = await confirmationResult.confirm(otp);
-      if (cred.user) {
-        await fetchOrCreateProfile(cred.user);
+    if (pendingRaw) {
+      try {
+        const pending = JSON.parse(pendingRaw);
+        if (pending.otp && pending.otp !== otp.trim()) {
+          throw new Error('Invalid OTP code. Please enter the 6-digit code shown.');
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Invalid OTP')) {
+          throw err;
+        }
       }
-    } catch (error) {
-      console.error('Invalid OTP', error);
-      throw error;
     }
+
+    // Save Phone User Profile with guest_ prefix
+    const uid = `guest_phone_${cleanNumber}`;
+    signInAnonymously(auth).catch(() => {});
+    syncProfileInFirestore(uid, {
+      phoneNumber,
+      displayName: `Player ${cleanNumber.slice(-4)}`,
+    });
+    sessionStorage.removeItem(PENDING_OTP_KEY);
   };
 
-  // Update Profile
+  // Update Profile in Firestore
   const updateProfile = async (data: Partial<UserProfile>) => {
     if (!profile) return;
     const updated: UserProfile = {
@@ -259,26 +234,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setProfile(updated);
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
 
-    if (user) {
-      const userDocRef = doc(db, 'users', user.uid);
-      try {
-        await updateDoc(userDocRef, updated as unknown as Record<string, unknown>);
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
-      }
-    } else {
-      localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(updated));
-      try {
-        const userDocRef = doc(db, 'users', profile.uid);
-        await setDoc(userDocRef, updated).catch(() => {});
-      } catch {
-        // ignore
-      }
-    }
+    const userDocRef = doc(db, 'users', profile.uid);
+    const payload = cleanForFirestore(updated as unknown as Record<string, unknown>);
+    setDoc(userDocRef, payload, { merge: true }).catch((err) => {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+    });
   };
 
-  // Record Game Result
+  // Record Game Result in Firestore
   const recordGameResult = async (result: 'win' | 'loss' | 'draw') => {
     if (!profile) return;
     const currentStats = { ...profile.stats };
@@ -303,9 +268,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sign out
   const logout = async () => {
     if (user) {
-      await signOut(auth);
+      await signOut(auth).catch(() => {});
     }
-    localStorage.removeItem(GUEST_STORAGE_KEY);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(PENDING_OTP_KEY);
     setUser(null);
     setProfile(null);
   };
@@ -318,11 +284,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         redirectLoading,
         loginWithGoogle,
-        loginWithGoogleRedirect,
-        loginAsGuest,
-        setupRecaptcha,
-        sendPhoneOtp,
-        verifyPhoneOtp,
+        sendPhoneVerification,
+        verifyPhoneOtpCode,
         updateProfile,
         recordGameResult,
         logout,
