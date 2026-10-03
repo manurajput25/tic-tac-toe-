@@ -174,7 +174,7 @@ export default function App() {
   const [isStatsOpen, setIsStatsOpen] = useState<boolean>(false);
 
   // User Profile & Online Multiplayer States
-  const { user, profile, recordGameResult } = useAuth();
+  const { user, profile, redirectLoading, recordGameResult } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isOnlineLobbyOpen, setIsOnlineLobbyOpen] = useState<boolean>(false);
@@ -1054,6 +1054,21 @@ export default function App() {
           onEnterOnlineMatch={handleEnterOnlineMatch}
           onRequireAuth={() => setIsAuthModalOpen(true)}
         />
+      )}
+
+      {/* Google Redirect Authenticating Overlay */}
+      {redirectLoading && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center animate-in fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-4 animate-spin">
+            <span className="text-2xl">⏳</span>
+          </div>
+          <h3 className="font-display text-lg font-bold text-white mb-1">
+            Connecting Google Account...
+          </h3>
+          <p className="text-xs text-slate-400">
+            Finalizing your login and syncing your Apex challenger profile
+          </p>
+        </div>
       )}
     </div>
   );

@@ -18,6 +18,7 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  redirectLoading: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithGoogleRedirect: () => Promise<void>;
   loginAsGuest: (username?: string, phoneNumber?: string) => Promise<void>;
@@ -53,6 +54,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [redirectLoading, setRedirectLoading] = useState<boolean>(() => {
+    return (
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('apex_redirect_login_in_progress') === 'true'
+    );
+  });
 
   // Fetch or initialize user profile in Firestore
   const fetchOrCreateProfile = async (firebaseUser: User) => {
@@ -104,11 +111,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check if returning from redirect login (mobile)
     getRedirectResult(auth)
       .then(async (result) => {
+        sessionStorage.removeItem('apex_redirect_login_in_progress');
+        setRedirectLoading(false);
         if (result && result.user) {
           await fetchOrCreateProfile(result.user);
         }
       })
       .catch((err) => {
+        sessionStorage.removeItem('apex_redirect_login_in_progress');
+        setRedirectLoading(false);
         console.warn('Redirect sign-in check:', err);
       });
 
@@ -148,11 +159,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Google Login via Full Page Redirect (Recommended on mobile browsers when popups are blocked)
+  // Google Login via Full Page Redirect (Solves mobile popup blocker completely)
   const loginWithGoogleRedirect = async () => {
     try {
+      sessionStorage.setItem('apex_redirect_login_in_progress', 'true');
+      setRedirectLoading(true);
       await signInWithRedirect(auth, googleProvider);
     } catch (error) {
+      sessionStorage.removeItem('apex_redirect_login_in_progress');
+      setRedirectLoading(false);
       console.error('Google Redirect Sign-in failed', error);
       throw error;
     }
@@ -301,6 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         loading,
+        redirectLoading,
         loginWithGoogle,
         loginWithGoogleRedirect,
         loginAsGuest,
