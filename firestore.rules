@@ -18,19 +18,11 @@ service cloud.firestore {
       return request.resource.data;
     }
 
-    function existing() {
-      return resource.data;
-    }
-
     // User Profiles Collection
     match /users/{userId} {
-      allow read: if isSignedIn() && isValidId(userId);
-      allow create: if isSignedIn() && request.auth.uid == userId && isValidId(userId)
-        && incoming().uid == request.auth.uid
-        && incoming().username is string && incoming().username.size() >= 2 && incoming().username.size() <= 30
-        && incoming().displayName is string && incoming().displayName.size() >= 1 && incoming().displayName.size() <= 60;
-      allow update: if isSignedIn() && request.auth.uid == userId && isValidId(userId)
-        && incoming().uid == existing().uid
+      allow read: if isValidId(userId);
+      allow create, update: if isValidId(userId)
+        && (isSignedIn() ? request.auth.uid == userId : userId.matches('^guest_[a-zA-Z0-9_\\-]+$'))
         && incoming().username is string && incoming().username.size() >= 2 && incoming().username.size() <= 30
         && incoming().displayName is string && incoming().displayName.size() >= 1 && incoming().displayName.size() <= 60;
       allow delete: if false;
@@ -38,18 +30,14 @@ service cloud.firestore {
 
     // Multiplayer Match Rooms Collection
     match /rooms/{roomId} {
-      allow read: if isSignedIn() && isValidId(roomId);
-      allow create: if isSignedIn() && isValidId(roomId)
-        && incoming().hostId == request.auth.uid
+      allow read: if isValidId(roomId);
+      allow create: if isValidId(roomId)
         && incoming().mode in ['classic3x3', 'infinite3', 'grid4x4']
         && incoming().status in ['waiting', 'playing', 'completed', 'abandoned']
         && incoming().board is list;
-      allow update: if isSignedIn() && isValidId(roomId)
-        && (existing().hostId == request.auth.uid || existing().guestId == request.auth.uid || existing().guestId == null)
-        && incoming().hostId == existing().hostId
+      allow update: if isValidId(roomId)
         && incoming().board is list;
-      allow delete: if isSignedIn() && isValidId(roomId)
-        && existing().hostId == request.auth.uid;
+      allow delete: if isValidId(roomId);
     }
   }
 }

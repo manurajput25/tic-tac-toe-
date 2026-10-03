@@ -3,6 +3,8 @@ import {
   User,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   RecaptchaVerifier,
   signInWithPhoneNumber,
@@ -17,6 +19,8 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
+  loginWithGoogleRedirect: () => Promise<void>;
+  loginAsGuest: (username?: string, phoneNumber?: string) => Promise<void>;
   setupRecaptcha: (containerId: string) => RecaptchaVerifier;
   sendPhoneOtp: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
   verifyPhoneOtp: (confirmationResult: ConfirmationResult, otp: string) => Promise<void>;
@@ -43,6 +47,8 @@ export function generatePlayerId(uid: string): string {
   return `APEX-${String(Math.abs(hash)).padStart(4, '0')}`;
 }
 
+const GUEST_STORAGE_KEY = 'apex_ttt_guest_profile_v1';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -54,9 +60,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const snap = await getDoc(userDocRef);
       if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
+        const p = snap.data() as UserProfile;
+        setProfile(p);
+        localStorage.removeItem(GUEST_STORAGE_KEY);
       } else {
-        // Generate new default profile
         const defaultUsername =
           firebaseUser.displayName?.replace(/\s+/g, '').slice(0, 15) ||
           `Player${firebaseUser.uid.slice(0, 5)}`;
@@ -82,8 +89,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           updatedAt: new Date().toISOString(),
         };
 
-        await setDoc(userDocRef, newProfile);
+        await setDoc(userDocRef, newProfile).catch((e) => {
+          console.warn('Could not save profile to firestore:', e);
+        });
         setProfile(newProfile);
+        localStorage.removeItem(GUEST_STORAGE_KEY);
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
@@ -91,12 +101,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // Check if returning from redirect login (mobile)
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result && result.user) {
+          await fetchOrCreateProfile(result.user);
+        }
+      })
+      .catch((err) => {
+        console.warn('Redirect sign-in check:', err);
+      });
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
         await fetchOrCreateProfile(currentUser);
       } else {
-        setProfile(null);
+        // Fallback to local guest profile if saved
+        try {
+          const saved = localStorage.getItem(GUEST_STORAGE_KEY);
+          if (saved) {
+            setProfile(JSON.parse(saved));
+          } else {
+            setProfile(null);
+          }
+        } catch {
+          setProfile(null);
+        }
       }
       setLoading(false);
     });
@@ -104,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  // Google Login
+  // Google Login via Popup
   const loginWithGoogle = async () => {
     try {
       const res = await signInWithPopup(auth, googleProvider);
@@ -114,6 +145,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Google Sign-in failed', error);
       throw error;
+    }
+  };
+
+  // Google Login via Full Page Redirect (Recommended on mobile browsers when popups are blocked)
+  const loginWithGoogleRedirect = async () => {
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (error) {
+      console.error('Google Redirect Sign-in failed', error);
+      throw error;
+    }
+  };
+
+  // Guest / Instant Profile (Enables immediate username & online multiplayer play on any domain)
+  const loginAsGuest = async (customUsername?: string, phoneNum?: string) => {
+    const guestUid = `guest_${Math.random().toString(36).substring(2, 10)}`;
+    const cleanUsername = customUsername?.trim() || `Challenger_${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const newProfile: UserProfile = {
+      uid: guestUid,
+      username: cleanUsername,
+      displayName: cleanUsername,
+      playerId: generatePlayerId(guestUid),
+      avatarKey: PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)].id,
+      email: null,
+      phoneNumber: phoneNum || null,
+      stats: {
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        bestStreak: 0,
+        currentStreak: 0,
+        totalGames: 0,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(newProfile));
+    setProfile(newProfile);
+
+    // Save to Firestore so other online players can read their name/avatar
+    try {
+      const docRef = doc(db, 'users', guestUid);
+      await setDoc(docRef, newProfile).catch(() => {});
+    } catch {
+      // ignore
     }
   };
 
@@ -158,24 +236,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Update Profile
   const updateProfile = async (data: Partial<UserProfile>) => {
-    if (!user || !profile) return;
-    const userDocRef = doc(db, 'users', user.uid);
-    const updated = {
+    if (!profile) return;
+    const updated: UserProfile = {
       ...profile,
       ...data,
       updatedAt: new Date().toISOString(),
     };
-    try {
-      await updateDoc(userDocRef, updated);
-      setProfile(updated);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+
+    setProfile(updated);
+
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      try {
+        await updateDoc(userDocRef, updated as unknown as Record<string, unknown>);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    } else {
+      localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(updated));
+      try {
+        const userDocRef = doc(db, 'users', profile.uid);
+        await setDoc(userDocRef, updated).catch(() => {});
+      } catch {
+        // ignore
+      }
     }
   };
 
   // Record Game Result
   const recordGameResult = async (result: 'win' | 'loss' | 'draw') => {
-    if (!user || !profile) return;
+    if (!profile) return;
     const currentStats = { ...profile.stats };
     currentStats.totalGames += 1;
 
@@ -197,7 +287,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Sign out
   const logout = async () => {
-    await signOut(auth);
+    if (user) {
+      await signOut(auth);
+    }
+    localStorage.removeItem(GUEST_STORAGE_KEY);
     setUser(null);
     setProfile(null);
   };
@@ -209,6 +302,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         loading,
         loginWithGoogle,
+        loginWithGoogleRedirect,
+        loginAsGuest,
         setupRecaptcha,
         sendPhoneOtp,
         verifyPhoneOtp,
