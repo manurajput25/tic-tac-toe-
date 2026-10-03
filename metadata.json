@@ -1,0 +1,6 @@
+{
+  "name": "Apex Tic-Tac-Toe",
+  "description": "A modern, beautifully animated Tic Tac Toe experience featuring classic 3x3, infinite 3-piece tactical mode, smart AI bot, and vibrant responsive motion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
