@@ -88,6 +88,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         losses: currentProfile?.losses || 0,
         draws: currentProfile?.draws || 0,
         bestStreak: currentProfile?.bestStreak || 0,
+        customPalettes: currentProfile?.customPalettes || [],
+        activePaletteId: currentProfile?.activePaletteId || null,
         createdAt: currentProfile?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -131,6 +133,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           losses: currentProfile?.losses || 0,
           draws: currentProfile?.draws || 0,
           bestStreak: currentProfile?.bestStreak || 0,
+          customPalettes: currentProfile?.customPalettes || [],
+          activePaletteId: currentProfile?.activePaletteId || null,
           createdAt: currentProfile?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };

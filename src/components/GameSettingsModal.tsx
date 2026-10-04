@@ -15,6 +15,7 @@ import {
   GameScore,
   UserProfile,
   CustomPalette,
+  PaletteVibe,
 } from '../types/game';
 import { THEMES, BACKGROUND_THEMES } from '../utils/theme';
 import { PreviewArena } from './PreviewArena';
@@ -45,6 +46,7 @@ import {
   BookOpen,
   Trophy,
 } from 'lucide-react';
+import { sound } from '../utils/audio';
 
 interface GameSettingsModalProps {
   currentTheme: ThemeId;
@@ -68,6 +70,7 @@ interface GameSettingsModalProps {
   onOpenPaletteStudio?: () => void;
   onSelectCustomPalette?: (palette: CustomPalette) => void;
   onDeleteCustomPalette?: (paletteId: string) => void;
+  onSaveCustomPalette?: (palette: CustomPalette) => Promise<void>;
   onClose: () => void;
 }
 
@@ -95,6 +98,7 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
   onOpenPaletteStudio,
   onSelectCustomPalette,
   onDeleteCustomPalette,
+  onSaveCustomPalette,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('board');
@@ -102,6 +106,16 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
   const [showMobilePreview, setShowMobilePreview] = useState<boolean>(true);
   const [confirmReset, setConfirmReset] = useState<boolean>(false);
   const [justReset, setJustReset] = useState<boolean>(false);
+
+  // Inline Custom Palette Studio State
+  const [isInlineDesignerOpen, setIsInlineDesignerOpen] = useState<boolean>(false);
+  const [customVibe, setCustomVibe] = useState<PaletteVibe>('neon');
+  const [customXColor, setCustomXColor] = useState<string>('#00f0ff');
+  const [customOColor, setCustomOColor] = useState<string>('#ff007f');
+  const [customGridBorder, setCustomGridBorder] = useState<string>('#00f0ff');
+  const [customName, setCustomName] = useState<string>('My Custom Arena');
+  const [isSavingCustom, setIsSavingCustom] = useState<boolean>(false);
+  const [inlineSuccessMsg, setInlineSuccessMsg] = useState<string | null>(null);
 
   const themeList = Object.values(THEMES);
   const bgThemeList = Object.values(BACKGROUND_THEMES);
@@ -743,16 +757,224 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
                         Design your own Neon or Minimalist color palette & persist to profile
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onOpenPaletteStudio) onOpenPaletteStudio();
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
-                    >
-                      + Design Custom Palette
-                    </button>
+                    <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sound.playClick();
+                          setIsInlineDesignerOpen(!isInlineDesignerOpen);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                      >
+                        {isInlineDesignerOpen ? '✕ Close Designer' : '+ Design Custom Palette'}
+                      </button>
+                      {onOpenPaletteStudio && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            sound.playClick();
+                            onOpenPaletteStudio();
+                          }}
+                          className="p-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-cyan-500 transition-colors cursor-pointer"
+                          title="Open Fullscreen Studio"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Inline Expandable Palette Designer */}
+                  {isInlineDesignerOpen && (
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/80 border-2 border-cyan-500/40 space-y-3.5 animate-in fade-in zoom-in-95 duration-200 shadow-xl">
+                      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-cyan-500" />
+                          <span>Custom Palette Designer</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">Real-time Arena Customizer</span>
+                      </div>
+
+                      {/* Archetype choice */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">
+                          Style Archetype
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sound.playClick();
+                              setCustomVibe('neon');
+                            }}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                              customVibe === 'neon'
+                                ? 'bg-cyan-500/15 border-cyan-500 text-cyan-700 dark:text-cyan-300 font-bold shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            <div className="text-xs font-bold flex items-center gap-1 text-cyan-500">
+                              <Zap className="w-3.5 h-3.5" />
+                              <span>Neon Glow</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400">Radiant laser aura & strike lights</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sound.playClick();
+                              setCustomVibe('minimalist');
+                            }}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                              customVibe === 'minimalist'
+                                ? 'bg-slate-200/70 dark:bg-slate-800 border-slate-400 text-slate-900 dark:text-white font-bold shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            <div className="text-xs font-bold flex items-center gap-1 text-slate-800 dark:text-slate-200">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Minimalist Clean</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400">Pure matte, zero-glare simplicity</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Color Pickers */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        {/* Piece X */}
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                            <span>Piece X Color</span>
+                            <input
+                              type="color"
+                              value={customXColor}
+                              onChange={(e) => setCustomXColor(e.target.value)}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                            />
+                          </div>
+                          <div className="flex gap-1 flex-wrap">
+                            {['#00f0ff', '#ff007f', '#a3e635', '#fbbf24', '#ffffff'].map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => setCustomXColor(c)}
+                                className="w-4 h-4 rounded-md border border-black/20 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Piece O */}
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                            <span>Piece O Color</span>
+                            <input
+                              type="color"
+                              value={customOColor}
+                              onChange={(e) => setCustomOColor(e.target.value)}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                            />
+                          </div>
+                          <div className="flex gap-1 flex-wrap">
+                            {['#ff007f', '#a855f7', '#38bdf8', '#f59e0b', '#94a3b8'].map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => setCustomOColor(c)}
+                                className="w-4 h-4 rounded-md border border-black/20 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Grid Accent */}
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                            <span>Grid Accent</span>
+                            <input
+                              type="color"
+                              value={customGridBorder}
+                              onChange={(e) => setCustomGridBorder(e.target.value)}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                            />
+                          </div>
+                          <div className="flex gap-1 flex-wrap">
+                            {['#00f0ff', '#f59e0b', '#10b981', '#475569', '#ffffff'].map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => setCustomGridBorder(c)}
+                                className="w-4 h-4 rounded-md border border-black/20 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Name & Save */}
+                      <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          maxLength={24}
+                          value={customName}
+                          onChange={(e) => setCustomName(e.target.value)}
+                          placeholder="Palette name (e.g. Cyber Matrix)"
+                          className="w-full sm:flex-1 px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-medium"
+                        />
+                        <button
+                          type="button"
+                          disabled={isSavingCustom || !customName.trim()}
+                          onClick={async () => {
+                            if (!customName.trim()) return;
+                            setIsSavingCustom(true);
+                            sound.playClick();
+                            const isNeon = customVibe === 'neon';
+                            const newPalette: CustomPalette = {
+                              id: `pal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                              name: customName.trim().slice(0, 24),
+                              vibe: customVibe,
+                              xColor: customXColor,
+                              xGlow: isNeon ? `${customXColor}bb` : 'transparent',
+                              oColor: customOColor,
+                              oGlow: isNeon ? `${customOColor}bb` : 'transparent',
+                              gridBorder: customGridBorder,
+                              cellBg: isNeon ? 'rgba(15, 23, 42, 0.9)' : 'rgba(30, 41, 59, 0.8)',
+                              createdAt: new Date().toISOString(),
+                            };
+
+                            try {
+                              if (onSaveCustomPalette) {
+                                await onSaveCustomPalette(newPalette);
+                              }
+                              if (onSelectCustomPalette) {
+                                onSelectCustomPalette(newPalette);
+                              }
+                              setInlineSuccessMsg(`"${newPalette.name}" saved & applied!`);
+                              setTimeout(() => {
+                                setInlineSuccessMsg(null);
+                                setIsInlineDesignerOpen(false);
+                              }, 1200);
+                            } finally {
+                              setIsSavingCustom(false);
+                            }
+                          }}
+                          className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-500 hover:from-cyan-300 hover:to-cyan-400 shadow-md active:scale-95 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+                        >
+                          {isSavingCustom ? 'Saving...' : '💾 Save & Apply to Game'}
+                        </button>
+                      </div>
+
+                      {inlineSuccessMsg && (
+                        <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold text-center animate-fade-in">
+                          ✓ {inlineSuccessMsg}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Saved Custom Palettes (if any exist in profile) */}
                   {userProfile?.customPalettes && userProfile.customPalettes.length > 0 && (

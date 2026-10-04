@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Globe, User } from 'lucide-react';
+import { Settings, Globe, Palette } from 'lucide-react';
 import { GameMode, UserProfile } from '../types/game';
 import { AVATAR_PRESETS } from '../utils/firebase';
 
@@ -7,6 +7,7 @@ interface NavbarProps {
   currentMode: GameMode;
   onSelectMode: (mode: GameMode) => void;
   onOpenSettings?: () => void;
+  onOpenPaletteStudio?: () => void;
   onOpenOnline: () => void;
   onOpenProfile: () => void;
   profile?: UserProfile | null;
@@ -16,6 +17,8 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   currentMode,
   onSelectMode,
+  onOpenSettings,
+  onOpenPaletteStudio,
   onOpenOnline,
   onOpenProfile,
   profile,
@@ -131,6 +134,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
+          {/* Custom Palettes Studio Button */}
+          {onOpenPaletteStudio && (
+            <button
+              onClick={onOpenPaletteStudio}
+              aria-label="Custom Color Palettes"
+              className="flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-sm active:scale-95 group"
+              title="Custom Color Palette Studio (Neon & Minimalist Styles)"
+            >
+              <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-500 dark:text-purple-400 shrink-0 group-hover:rotate-12 transition-transform" />
+              <span className="hidden md:inline font-semibold">Palettes</span>
+            </button>
+          )}
+
           {/* Gamer Profile Button */}
           <button
             onClick={onOpenProfile}
@@ -147,6 +163,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               {profile?.displayName || 'Profile'}
             </span>
           </button>
+
+          {/* Settings Button */}
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              aria-label="Game Settings"
+              className="p-1.5 sm:p-2 text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-sm active:scale-95 group"
+              title="Arena Customization & Settings"
+            >
+              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 dark:text-slate-400 group-hover:rotate-45 transition-transform" />
+            </button>
+          )}
         </div>
       </div>
     </header>

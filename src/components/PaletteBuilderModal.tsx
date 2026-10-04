@@ -166,7 +166,7 @@ export const PaletteBuilderModal: React.FC<PaletteBuilderModalProps> = ({
     <div
       role="dialog"
       aria-label="Custom Palette Studio"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-2xl animate-in fade-in duration-200 overflow-y-auto"
     >
       <div className="relative w-full max-w-xl my-auto p-5 sm:p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl text-slate-900 dark:text-slate-100 overflow-hidden">
         {/* Ambient Top Glow */}

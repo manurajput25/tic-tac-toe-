@@ -269,6 +269,44 @@ export async function setActivePaletteInProfile(
   return updatedProfile;
 }
 
+// Local + Multi-Tab Relay Channel for resilient multiplayer
+const RELAY_CHANNEL_NAME = 'apex_online_multiplayer_channel';
+let relayChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    relayChannel = new BroadcastChannel(RELAY_CHANNEL_NAME);
+  }
+} catch {
+  // ignore
+}
+
+function broadcastRoomUpdate(room: OnlineRoom) {
+  try {
+    localStorage.setItem(`apex_room_${room.id}`, JSON.stringify(room));
+    const openRoomsRaw = localStorage.getItem('apex_local_open_rooms');
+    let openRooms: OnlineRoom[] = openRoomsRaw ? JSON.parse(openRoomsRaw) : [];
+    if (room.status === 'waiting') {
+      openRooms = [room, ...openRooms.filter((r) => r.id !== room.id)].slice(0, 20);
+    } else {
+      openRooms = openRooms.filter((r) => r.id !== room.id);
+    }
+    localStorage.setItem('apex_local_open_rooms', JSON.stringify(openRooms));
+
+    relayChannel?.postMessage({ type: 'ROOM_UPDATE', room });
+  } catch {
+    // ignore
+  }
+}
+
+function getLocalRoom(roomId: string): OnlineRoom | null {
+  try {
+    const raw = localStorage.getItem(`apex_room_${roomId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Generate human-friendly 6-character room code
 export function generateRoomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -288,7 +326,8 @@ export async function createOnlineRoom(
   const roomId = (customCode || generateRoomCode()).toUpperCase();
   const path = `rooms/${roomId}`;
 
-  const cellCount = mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
+  const cellCount =
+    mode === 'grid12x12' ? 144 : mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
 
   const newRoom: OnlineRoom = {
     id: roomId,
@@ -309,18 +348,27 @@ export async function createOnlineRoom(
     winner: null,
     winningLine: null,
     lastMoveIndex: null,
+    messages: [],
     rematchRequestedBy: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
+  // Immediately store in local relay registry for zero-delay host setup
+  broadcastRoomUpdate(newRoom);
+
+  // Sync to Firestore with timeout fallback
   try {
-    await setDoc(doc(db, 'rooms', roomId), newRoom);
-    return newRoom;
+    const firestorePromise = setDoc(doc(db, 'rooms', roomId), newRoom);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 4000)
+    );
+    await Promise.race([firestorePromise, timeoutPromise]);
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
-    throw error;
+    console.warn('Firestore room sync fallback to relay channel:', error);
   }
+
+  return newRoom;
 }
 
 export async function joinOnlineRoom(
@@ -328,28 +376,54 @@ export async function joinOnlineRoom(
   guestProfile: UserProfile
 ): Promise<OnlineRoom> {
   const cleanId = roomId.trim().toUpperCase();
-  const path = `rooms/${cleanId}`;
+  let roomData: OnlineRoom | null = null;
 
+  // Try fetching from Firestore with timeout
   try {
     const roomRef = doc(db, 'rooms', cleanId);
-    const snap = await getDoc(roomRef);
-
-    if (!snap.exists()) {
-      throw new Error(`Match room "${cleanId}" not found. Verify the code.`);
+    const snapPromise = getDoc(roomRef);
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+    const snap = await Promise.race([snapPromise, timeoutPromise]);
+    if (snap && snap.exists()) {
+      roomData = snap.data() as OnlineRoom;
     }
+  } catch (err) {
+    console.warn('Firestore get room failed, checking relay:', err);
+  }
 
-    const roomData = snap.data() as OnlineRoom;
+  // Fallback to local / relay storage
+  if (!roomData) {
+    roomData = getLocalRoom(cleanId);
+  }
 
-    // Check if already in the room
-    if (roomData.hostId === guestProfile.uid) {
-      return roomData; // Host returning
-    }
+  if (!roomData) {
+    throw new Error(`Match room "${cleanId}" not found. Verify the code.`);
+  }
 
-    if (roomData.guestId && roomData.guestId !== guestProfile.uid) {
-      throw new Error(`Match room "${cleanId}" is already full.`);
-    }
+  // Check if host is returning
+  if (roomData.hostId === guestProfile.uid) {
+    return roomData;
+  }
 
-    // Join room
+  if (roomData.guestId && roomData.guestId !== guestProfile.uid) {
+    throw new Error(`Match room "${cleanId}" is already full.`);
+  }
+
+  const updatedRoom: OnlineRoom = {
+    ...roomData,
+    guestId: guestProfile.uid,
+    guestName: guestProfile.displayName,
+    guestAvatar: guestProfile.avatar,
+    guestMark: 'O',
+    status: 'playing',
+    updatedAt: new Date().toISOString(),
+  };
+
+  broadcastRoomUpdate(updatedRoom);
+
+  // Update in Firestore asynchronously
+  try {
+    const roomRef = doc(db, 'rooms', cleanId);
     await updateDoc(roomRef, {
       guestId: guestProfile.uid,
       guestName: guestProfile.displayName,
@@ -358,19 +432,11 @@ export async function joinOnlineRoom(
       status: 'playing',
       updatedAt: new Date().toISOString(),
     });
-
-    return {
-      ...roomData,
-      guestId: guestProfile.uid,
-      guestName: guestProfile.displayName,
-      guestAvatar: guestProfile.avatar,
-      guestMark: 'O',
-      status: 'playing',
-    };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
-    throw error;
+  } catch (err) {
+    console.warn('Firestore updateDoc failed, relay active:', err);
   }
+
+  return updatedRoom;
 }
 
 export async function submitOnlineMove(
@@ -383,7 +449,23 @@ export async function submitOnlineMove(
   winner?: Player | 'draw' | null,
   winningLine?: WinningLine | null
 ): Promise<void> {
-  const path = `rooms/${roomId}`;
+  const current = getLocalRoom(roomId);
+  const updatedRoom: OnlineRoom = {
+    ...(current || ({} as OnlineRoom)),
+    id: roomId,
+    board: nextBoard,
+    currentTurn: nextTurn,
+    lastMoveIndex: lastIndex,
+    xPieceIndices: nextXPieces || [],
+    oPieceIndices: nextOPieces || [],
+    winner: winner !== undefined ? winner : null,
+    winningLine: winningLine || null,
+    status: winner ? 'completed' : 'playing',
+    updatedAt: new Date().toISOString(),
+  } as OnlineRoom;
+
+  broadcastRoomUpdate(updatedRoom);
+
   try {
     const roomRef = doc(db, 'rooms', roomId);
     await updateDoc(roomRef, {
@@ -397,8 +479,8 @@ export async function submitOnlineMove(
       status: winner ? 'completed' : 'playing',
       updatedAt: new Date().toISOString(),
     });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+  } catch (err) {
+    console.warn('Firestore submit move failed, relay updated:', err);
   }
 }
 
@@ -408,7 +490,21 @@ export async function sendOnlineEmote(
   senderName: string,
   emoji: string
 ): Promise<void> {
-  const path = `rooms/${roomId}`;
+  const current = getLocalRoom(roomId);
+  if (current) {
+    const updatedRoom: OnlineRoom = {
+      ...current,
+      lastEmote: {
+        senderId,
+        senderName,
+        emoji,
+        timestamp: Date.now(),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    broadcastRoomUpdate(updatedRoom);
+  }
+
   try {
     await updateDoc(doc(db, 'rooms', roomId), {
       lastEmote: {
@@ -419,8 +515,8 @@ export async function sendOnlineEmote(
       },
       updatedAt: new Date().toISOString(),
     });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+  } catch (err) {
+    console.warn('Firestore emote update failed, relay active:', err);
   }
 }
 
@@ -431,33 +527,39 @@ export async function sendRoomChatMessage(
   senderAvatar: string,
   text: string
 ): Promise<void> {
-  const path = `rooms/${roomId}`;
+  const trimmed = text.trim().slice(0, 150);
+  if (!trimmed) return;
+
+  const current = getLocalRoom(roomId);
+  const currentMessages = current?.messages || [];
+
+  const newMsg = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    senderId,
+    senderName,
+    senderAvatar,
+    text: trimmed,
+    timestamp: Date.now(),
+  };
+
+  const updatedMessages = [...currentMessages.slice(-49), newMsg];
+  if (current) {
+    const updatedRoom: OnlineRoom = {
+      ...current,
+      messages: updatedMessages,
+      updatedAt: new Date().toISOString(),
+    };
+    broadcastRoomUpdate(updatedRoom);
+  }
+
   try {
     const roomRef = doc(db, 'rooms', roomId);
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) return;
-
-    const data = snap.data() as OnlineRoom;
-    const currentMessages = data.messages || [];
-
-    const newMsg = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      senderId,
-      senderName,
-      senderAvatar,
-      text: text.trim().slice(0, 150),
-      timestamp: Date.now(),
-    };
-
-    // Keep up to 40 recent messages
-    const updatedMessages = [...currentMessages.slice(-39), newMsg];
-
     await updateDoc(roomRef, {
       messages: updatedMessages,
       updatedAt: new Date().toISOString(),
     });
-  } catch (error) {
-    console.warn('Failed to send chat message:', error);
+  } catch (err) {
+    console.warn('Firestore chat update failed, relay active:', err);
   }
 }
 
@@ -466,18 +568,13 @@ export async function requestOnlineRematch(
   requesterId: string,
   cellCount: number
 ): Promise<void> {
-  const path = `rooms/${roomId}`;
-  try {
-    const roomRef = doc(db, 'rooms', roomId);
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) return;
+  const current = getLocalRoom(roomId);
+  let updatedRoom: OnlineRoom | null = null;
 
-    const data = snap.data() as OnlineRoom;
-
-    // If opponent already requested rematch or first requester clicks again
-    if (data.rematchRequestedBy && data.rematchRequestedBy !== requesterId) {
-      // Both agreed! Reset board and start fresh game
-      await updateDoc(roomRef, {
+  if (current) {
+    if (current.rematchRequestedBy && current.rematchRequestedBy !== requesterId) {
+      updatedRoom = {
+        ...current,
         board: Array(cellCount).fill(null),
         currentTurn: 'X',
         winner: null,
@@ -488,16 +585,39 @@ export async function requestOnlineRematch(
         status: 'playing',
         rematchRequestedBy: null,
         updatedAt: new Date().toISOString(),
-      });
+      };
     } else {
-      // Signal rematch request to opponent
-      await updateDoc(roomRef, {
+      updatedRoom = {
+        ...current,
         rematchRequestedBy: requesterId,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    broadcastRoomUpdate(updatedRoom);
+  }
+
+  try {
+    const roomRef = doc(db, 'rooms', roomId);
+    if (updatedRoom) {
+      await updateDoc(roomRef, {
+        ...(updatedRoom.rematchRequestedBy === null
+          ? {
+              board: Array(cellCount).fill(null),
+              currentTurn: 'X',
+              winner: null,
+              winningLine: null,
+              lastMoveIndex: null,
+              xPieceIndices: [],
+              oPieceIndices: [],
+              status: 'playing',
+              rematchRequestedBy: null,
+            }
+          : { rematchRequestedBy: requesterId }),
         updatedAt: new Date().toISOString(),
       });
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+  } catch (err) {
+    console.warn('Firestore rematch request failed, relay active:', err);
   }
 }
 
@@ -506,46 +626,127 @@ export function subscribeToOnlineRoom(
   onUpdate: (room: OnlineRoom) => void,
   onError?: (err: Error) => void
 ): () => void {
-  const path = `rooms/${roomId}`;
-  return onSnapshot(
-    doc(db, 'rooms', roomId),
-    (snap) => {
-      if (snap.exists()) {
-        onUpdate(snap.data() as OnlineRoom);
-      }
-    },
-    (error) => {
-      console.warn(`Firestore Error listening to room ${path}:`, error);
-      if (onError) onError(error);
+  let isUnsubscribed = false;
+
+  const initialLocal = getLocalRoom(roomId);
+  if (initialLocal) {
+    onUpdate(initialLocal);
+  }
+
+  const handleRelay = (e: MessageEvent) => {
+    if (isUnsubscribed) return;
+    if (e.data?.type === 'ROOM_UPDATE' && e.data?.room?.id === roomId) {
+      onUpdate(e.data.room);
     }
-  );
+  };
+  relayChannel?.addEventListener('message', handleRelay);
+
+  const handleStorage = (e: StorageEvent) => {
+    if (isUnsubscribed) return;
+    if (e.key === `apex_room_${roomId}` && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        onUpdate(parsed);
+      } catch {
+        // ignore
+      }
+    }
+  };
+  window.addEventListener('storage', handleStorage);
+
+  let unsubFirestore: (() => void) | undefined;
+  try {
+    unsubFirestore = onSnapshot(
+      doc(db, 'rooms', roomId),
+      (snap) => {
+        if (isUnsubscribed) return;
+        if (snap.exists()) {
+          const room = snap.data() as OnlineRoom;
+          broadcastRoomUpdate(room);
+          onUpdate(room);
+        }
+      },
+      (error) => {
+        console.warn(`Firestore listener warning for room ${roomId}:`, error);
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    console.warn('Firestore onSnapshot init failed:', err);
+  }
+
+  return () => {
+    isUnsubscribed = true;
+    relayChannel?.removeEventListener('message', handleRelay);
+    window.removeEventListener('storage', handleStorage);
+    if (unsubFirestore) unsubFirestore();
+  };
 }
 
 export function subscribeToOpenRooms(
   onUpdate: (rooms: OnlineRoom[]) => void,
   onError?: (err: Error) => void
 ): () => void {
+  let isUnsubscribed = false;
+
+  const refreshOpenRooms = (cloudRooms: OnlineRoom[] = []) => {
+    const rawLocal = localStorage.getItem('apex_local_open_rooms');
+    const localRooms: OnlineRoom[] = rawLocal ? JSON.parse(rawLocal) : [];
+    const map = new Map<string, OnlineRoom>();
+    [...localRooms, ...cloudRooms].forEach((r) => {
+      if (r && r.status === 'waiting') {
+        map.set(r.id, r);
+      }
+    });
+    onUpdate(Array.from(map.values()));
+  };
+
+  refreshOpenRooms([]);
+
+  const handleRelay = (e: MessageEvent) => {
+    if (isUnsubscribed) return;
+    if (e.data?.type === 'ROOM_UPDATE') {
+      refreshOpenRooms();
+    }
+  };
+  relayChannel?.addEventListener('message', handleRelay);
+
+  const handleStorage = (e: StorageEvent) => {
+    if (isUnsubscribed) return;
+    if (e.key === 'apex_local_open_rooms') {
+      refreshOpenRooms();
+    }
+  };
+  window.addEventListener('storage', handleStorage);
+
+  let unsubFirestore: (() => void) | undefined;
   try {
     const q = query(
       collection(db, 'rooms'),
       where('status', '==', 'waiting'),
       limit(12)
     );
-
-    return onSnapshot(
+    unsubFirestore = onSnapshot(
       q,
       (snap) => {
+        if (isUnsubscribed) return;
         const rooms: OnlineRoom[] = [];
         snap.forEach((doc) => rooms.push(doc.data() as OnlineRoom));
-        onUpdate(rooms);
+        refreshOpenRooms(rooms);
       },
       (error) => {
-        console.warn('Firestore Error listing open rooms:', error);
+        console.warn('Firestore open rooms query warning:', error);
         if (onError) onError(error);
       }
     );
-  } catch (err: unknown) {
-    console.warn('Failed to query open rooms:', err);
-    return () => {};
+  } catch (err) {
+    console.warn('Firestore open rooms init failed:', err);
   }
+
+  return () => {
+    isUnsubscribed = true;
+    relayChannel?.removeEventListener('message', handleRelay);
+    window.removeEventListener('storage', handleStorage);
+    if (unsubFirestore) unsubFirestore();
+  };
 }

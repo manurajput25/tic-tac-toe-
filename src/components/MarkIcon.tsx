@@ -43,6 +43,8 @@ export const MarkIcon: React.FC<MarkIconProps> = ({
         height: pixelSize,
         filter: isExpiring
           ? 'drop-shadow(0 0 6px rgba(244, 63, 94, 0.4))'
+          : theme.vibe === 'minimalist'
+          ? 'none'
           : markStyle === 'neon-glow'
           ? `drop-shadow(0 0 16px ${glow}) drop-shadow(0 0 3px ${color})`
           : markStyle === 'bold-solid'

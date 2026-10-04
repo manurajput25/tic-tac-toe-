@@ -210,7 +210,17 @@ export const Board: React.FC<BoardProps> = ({
       )}
 
       {/* Board Chassis Container */}
-      <div className={`relative w-full h-full ${is12x12 ? 'p-1.5 sm:p-2.5' : 'p-3 sm:p-4'} ${getBoardChassisClasses()}`}>
+      <div
+        className={`relative w-full h-full ${is12x12 ? 'p-1.5 sm:p-2.5' : 'p-3 sm:p-4'} ${getBoardChassisClasses()}`}
+        style={
+          theme.isCustom && theme.gridBorder && theme.gridBorder.startsWith('#')
+            ? {
+                borderColor: theme.gridBorder,
+                boxShadow: theme.vibe === 'neon' ? `0 0 30px ${theme.gridBorder}40` : undefined,
+              }
+            : undefined
+        }
+      >
         {/* Top metallic bevel reflection */}
         {customization.style === 'glass-stadium' && (
           <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-slate-300 dark:via-white/20 to-transparent pointer-events-none" />
@@ -252,6 +262,15 @@ export const Board: React.FC<BoardProps> = ({
                 onMouseEnter={() => setHoveredCell(index)}
                 onMouseLeave={() => setHoveredCell(null)}
                 className={getCellClasses(canClick, !!isWinningCell, isHint)}
+                style={
+                  theme.isCustom
+                    ? {
+                        borderColor: isWinningCell ? undefined : theme.gridBorder && theme.gridBorder.startsWith('#') ? `${theme.gridBorder}50` : undefined,
+                        backgroundColor: isWinningCell ? undefined : theme.cellBg || undefined,
+                        boxShadow: theme.vibe === 'neon' && theme.gridBorder && theme.gridBorder.startsWith('#') ? `0 0 10px ${theme.gridBorder}15` : undefined,
+                      }
+                    : undefined
+                }
               >
                 {/* Subtle top specular bevel */}
                 <div className="absolute inset-x-2 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />

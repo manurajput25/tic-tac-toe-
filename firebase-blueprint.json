@@ -29,7 +29,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Room ID or 6-digit code" },
-        "mode": { "type": "string", "description": "Game mode: classic3x3, infinite3, or grid4x4" },
+        "mode": { "type": "string", "description": "Game mode: classic3x3, infinite3, grid4x4, grid6x6, or grid12x12" },
         "status": { "type": "string", "enum": ["waiting", "playing", "completed", "abandoned"], "description": "Room match status" },
         "hostId": { "type": "string", "description": "UID of the player who created the room" },
         "hostName": { "type": "string", "description": "Name of host player" },

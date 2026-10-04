@@ -138,6 +138,11 @@ export const GameControls: React.FC<GameControlsProps> = ({
         {gameMode === 'grid6x6' && (
           <span>6×6 Grand Arena: Align 4 consecutive marks across 36 cells. Master open ends and forks!</span>
         )}
+        {gameMode === 'grid12x12' && (
+          <span>
+            <strong className="text-amber-600 dark:text-amber-400 font-semibold">12×12 Epic Grid:</strong> Align 6 consecutive pieces in any direction across 144 cells to achieve victory!
+          </span>
+        )}
       </div>
     </div>
   );

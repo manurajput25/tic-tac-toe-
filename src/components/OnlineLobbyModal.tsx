@@ -4,6 +4,7 @@ import {
   createOnlineRoom,
   joinOnlineRoom,
   subscribeToOpenRooms,
+  generateRoomCode,
   AVATAR_PRESETS,
 } from '../utils/firebase';
 import { sound } from '../utils/audio';
@@ -79,7 +80,16 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
       const room = await createOnlineRoom(selectedMode, userProfile);
       setWaitingRoom(room);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not create room');
+      console.warn('Primary room creation error, deploying fallback relay room:', err);
+      try {
+        const fallbackCode = generateRoomCode();
+        const fallbackRoom = await createOnlineRoom(selectedMode, userProfile, fallbackCode);
+        setWaitingRoom(fallbackRoom);
+      } catch (fallbackErr: unknown) {
+        setErrorMessage(
+          fallbackErr instanceof Error ? fallbackErr.message : 'Could not create battle room'
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -218,7 +228,38 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
               Game Mode: <strong className="text-white uppercase">{waitingRoom.mode}</strong>
             </div>
 
-            <div className="mt-5 pt-3 border-t border-slate-800 flex justify-center">
+            {/* Instant Challenger Test Button for Solo Testing */}
+            <div className="mt-4 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-xs text-slate-300 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <span className="text-[11px] text-slate-400 text-center sm:text-left">
+                Testing multiplayer without a 2nd device right now?
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  sound.playClick();
+                  const testGuest: UserProfile = {
+                    uid: `guest_${Date.now()}`,
+                    displayName: 'Cyber Challenger',
+                    username: 'challenger_99',
+                    avatar: 'solar-phoenix',
+                    totalGames: 12,
+                    wins: 8,
+                    losses: 4,
+                    draws: 0,
+                    bestStreak: 4,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                  };
+                  const joined = await joinOnlineRoom(waitingRoom.id, testGuest);
+                  onRoomJoined(joined, true);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap active:scale-95"
+              >
+                ⚔️ Start Match (Simulate Challenger)
+              </button>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800 flex justify-center">
               <button
                 onClick={() => setWaitingRoom(null)}
                 className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"

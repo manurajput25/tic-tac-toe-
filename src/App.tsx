@@ -458,6 +458,10 @@ export default function App() {
           sound.playClick();
           setIsSettingsOpen(true);
         }}
+        onOpenPaletteStudio={() => {
+          sound.playClick();
+          setIsPaletteStudioOpen(true);
+        }}
         onOpenOnline={() => {
           sound.playClick();
           setIsOnlineLobbyOpen(true);
@@ -599,6 +603,20 @@ export default function App() {
           onOpenOnlineLobby={() => setIsOnlineLobbyOpen(true)}
         />
       </main>
+
+      {/* Real-time In-Game Live Chat for Online Multiplayer */}
+      {opponent === 'online' && activeOnlineRoom && (
+        <GameChat
+          roomId={activeOnlineRoom.id}
+          userProfile={userProfile}
+          messages={activeOnlineRoom.messages || []}
+          opponentName={
+            onlineUserMark === 'X'
+              ? activeOnlineRoom.guestName || 'Challenger'
+              : activeOnlineRoom.hostName || 'Host'
+          }
+        />
+      )}
 
       {/* Footer Branding & Keyboard Info */}
       <footer className="relative z-10 py-4 text-center text-xs text-slate-500 dark:text-slate-500 border-t border-slate-200/60 dark:border-slate-800/60">
