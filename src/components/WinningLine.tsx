@@ -17,7 +17,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
   const color = winner === 'X' ? theme.xColor : theme.oColor;
   const glow = winner === 'X' ? theme.xGlow : theme.oGlow;
 
-  const size = mode === 'grid6x6' ? 6 : mode === 'grid4x4' ? 4 : 3;
+  const size = mode === 'grid12x12' ? 12 : mode === 'grid6x6' ? 6 : mode === 'grid4x4' ? 4 : 3;
   const first = winningLine.indices[0];
   const last = winningLine.indices[winningLine.indices.length - 1];
 
@@ -37,7 +37,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const dist = Math.hypot(dx, dy) || 1;
-  const extension = size === 6 ? 2.5 : size === 4 ? 4 : 5.5;
+  const extension = size === 12 ? 1.5 : size === 6 ? 2.5 : size === 4 ? 4 : 5.5;
 
   const x1 = start.x - (dx / dist) * extension;
   const y1 = start.y - (dy / dist) * extension;
@@ -68,7 +68,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
         x2={x2}
         y2={y2}
         stroke={glow}
-        strokeWidth={size === 6 ? 6 : 8}
+        strokeWidth={size === 12 ? 4 : size === 6 ? 6 : 8}
         strokeLinecap="round"
         filter="url(#glow-strike)"
         className="opacity-70 animate-strike-glow"
@@ -81,7 +81,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
         x2={x2}
         y2={y2}
         stroke={color}
-        strokeWidth={size === 6 ? 3.5 : 4.5}
+        strokeWidth={size === 12 ? 2 : size === 6 ? 3.5 : 4.5}
         strokeLinecap="round"
         className="animate-strike-core"
       />
@@ -93,7 +93,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
         x2={x2}
         y2={y2}
         stroke="#ffffff"
-        strokeWidth={size === 6 ? 1.5 : 2}
+        strokeWidth={size === 12 ? 0.8 : size === 6 ? 1.5 : 2}
         strokeLinecap="round"
         className="opacity-95"
       />

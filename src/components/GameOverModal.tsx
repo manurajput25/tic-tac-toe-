@@ -9,6 +9,8 @@ interface GameOverModalProps {
   opponent: OpponentType;
   theme: ThemeConfig;
   streakCount?: number;
+  playerXName?: string;
+  playerOName?: string;
   onPlayAgain: () => void;
   onReviewMatch: () => void;
   onClose: () => void;
@@ -20,6 +22,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   opponent,
   theme,
   streakCount,
+  playerXName,
+  playerOName,
   onPlayAgain,
   onReviewMatch,
   onClose,
@@ -28,6 +32,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
   const isWin = status === 'won';
   const isAiWinner = isWin && opponent === 'bot' && winner === 'O';
+  const winnerTitle =
+    isWin
+      ? opponent === 'bot'
+        ? isAiWinner
+          ? 'Gemini Claims Victory'
+          : 'You Won!'
+        : opponent === 'online'
+        ? winner === 'X'
+          ? `${playerXName || 'Host'} Triumphs!`
+          : `${playerOName || 'Challenger'} Triumphs!`
+        : `Player ${winner} Triumphs!`
+      : "It's a Stalemate!";
 
   const accentColor =
     isWin && winner === 'X'
@@ -70,13 +86,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           )}
 
           <h3 className="font-display text-2xl font-extrabold text-slate-900 dark:text-white mb-1.5 tracking-tight">
-            {isWin
-              ? opponent === 'bot'
-                ? isAiWinner
-                  ? 'Gemini Claims Victory'
-                  : 'Victory Achieved!'
-                : `Player ${winner} Triumphs!`
-              : "It's a Stalemate!"}
+            {winnerTitle}
           </h3>
 
           <p className="text-xs text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">

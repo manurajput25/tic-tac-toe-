@@ -4,7 +4,7 @@ import { Player, ThemeConfig, MarkStyle } from '../types/game';
 interface MarkIconProps {
   player: Player;
   theme: ThemeConfig;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   animated?: boolean;
   isExpiring?: boolean; // For Infinite mode: piece about to disappear
   orderNumber?: number; // 1 (oldest), 2, 3 (newest)
@@ -20,8 +20,8 @@ export const MarkIcon: React.FC<MarkIconProps> = ({
   orderNumber,
   markStyle = 'neon-glow',
 }) => {
-  const pixelSize = size === 'lg' ? 76 : size === 'md' ? 48 : 28;
-  const baseStrokeWidth = size === 'lg' ? 9.5 : size === 'md' ? 6.5 : 4;
+  const pixelSize = size === 'lg' ? 76 : size === 'md' ? 48 : size === 'sm' ? 28 : 18;
+  const baseStrokeWidth = size === 'lg' ? 9.5 : size === 'md' ? 6.5 : size === 'sm' ? 4 : 2.8;
   const strokeWidth =
     markStyle === 'bold-solid'
       ? baseStrokeWidth * 1.35

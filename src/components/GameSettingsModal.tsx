@@ -13,6 +13,8 @@ import {
   ParticleSpeed,
   TrailStyle,
   GameScore,
+  UserProfile,
+  CustomPalette,
 } from '../types/game';
 import { THEMES, BACKGROUND_THEMES } from '../utils/theme';
 import { PreviewArena } from './PreviewArena';
@@ -62,6 +64,10 @@ interface GameSettingsModalProps {
   score?: GameScore;
   onResetStats?: () => void;
   onResetRound?: () => void;
+  userProfile?: UserProfile;
+  onOpenPaletteStudio?: () => void;
+  onSelectCustomPalette?: (palette: CustomPalette) => void;
+  onDeleteCustomPalette?: (paletteId: string) => void;
   onClose: () => void;
 }
 
@@ -85,6 +91,10 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
   score,
   onResetStats,
   onResetRound,
+  userProfile,
+  onOpenPaletteStudio,
+  onSelectCustomPalette,
+  onDeleteCustomPalette,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('board');
@@ -718,6 +728,103 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {/* Custom Palette Studio Card */}
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-500/15 via-purple-500/10 to-pink-500/15 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white">
+                        <Palette className="w-4 h-4 text-cyan-500" />
+                        <span>Custom Palette Studio</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 uppercase">
+                          Profile Synced
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Design your own Neon or Minimalist color palette & persist to profile
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenPaletteStudio) onOpenPaletteStudio();
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+                    >
+                      + Design Custom Palette
+                    </button>
+                  </div>
+
+                  {/* Saved Custom Palettes (if any exist in profile) */}
+                  {userProfile?.customPalettes && userProfile.customPalettes.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-cyan-500" />
+                          <span>My Custom Palettes ({userProfile.customPalettes.length})</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">Saved in your profile</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {userProfile.customPalettes.map((cp) => {
+                          const isSelected = currentTheme === cp.id;
+                          return (
+                            <div
+                              key={cp.id}
+                              onClick={() => {
+                                if (onSelectCustomPalette) onSelectCustomPalette(cp);
+                              }}
+                              className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative shadow-sm group ${
+                                isSelected
+                                  ? 'bg-cyan-50 dark:bg-slate-800 border-cyan-500 text-cyan-900 dark:text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.2)] ring-1 ring-cyan-500'
+                                  : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                    {cp.name}
+                                  </span>
+                                  <span className="text-[8px] font-bold uppercase px-1 rounded-sm bg-cyan-500/20 text-cyan-400 shrink-0">
+                                    {cp.vibe}
+                                  </span>
+                                </div>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <div
+                                    className="w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold font-display shadow-sm"
+                                    style={{ backgroundColor: `${cp.xColor}25`, color: cp.xColor }}
+                                  >
+                                    ✕
+                                  </div>
+                                  <div
+                                    className="w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold font-display shadow-sm"
+                                    style={{ backgroundColor: `${cp.oColor}25`, color: cp.oColor }}
+                                  >
+                                    ◯
+                                  </div>
+                                </div>
+                                {onDeleteCustomPalette && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteCustomPalette(cp.id);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-1"
+                                    title="Delete custom palette"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Theme Palette Selection */}
                   <div>

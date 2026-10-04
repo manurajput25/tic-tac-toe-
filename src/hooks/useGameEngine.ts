@@ -8,6 +8,7 @@ import {
   WinningLine,
   GameStatus,
   GameScore,
+  ModeScores,
   MoveRecord,
 } from '../types/game';
 import { sound } from '../utils/audio';
@@ -19,11 +20,23 @@ import {
   getBestMoveInfinite,
   getBestMove4x4,
   getBestMove6x6,
+  getBestMove12x12,
   getHintMove,
 } from '../utils/ai';
 
-const SCORE_STORAGE_KEY = 'apex_ttt_scores_v1';
-const getCellCount = (m: GameMode): number => (m === 'grid6x6' ? 36 : m === 'grid4x4' ? 16 : 9);
+const SCORES_STORAGE_KEY = 'apex_ttt_scores_by_mode_v2';
+const LEGACY_STORAGE_KEY = 'apex_ttt_scores_v1';
+
+const defaultScore = (): GameScore => ({
+  playerX: 0,
+  playerO: 0,
+  draws: 0,
+  currentStreak: 0,
+  bestStreak: 0,
+});
+
+const getCellCount = (m: GameMode): number =>
+  m === 'grid12x12' ? 144 : m === 'grid6x6' ? 36 : m === 'grid4x4' ? 16 : 9;
 
 export interface UseGameEngineOptions {
   mode: GameMode;
@@ -65,25 +78,65 @@ export function useGameEngine({
   const [blitzTimeLeft, setBlitzTimeLeft] = useState<number | null>(blitzDuration);
   const [streakMilestone, setStreakMilestone] = useState<number | null>(null);
 
-  // Score Tracking
-  const [score, setScore] = useState<GameScore>(() => {
+  // Score Tracking: Segregated across 'bot', 'pvp', and 'online'
+  const [allScores, setAllScores] = useState<ModeScores>(() => {
     try {
-      const saved = localStorage.getItem(SCORE_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      const saved = localStorage.getItem(SCORES_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          bot: parsed.bot || defaultScore(),
+          pvp: parsed.pvp || defaultScore(),
+          online: parsed.online || defaultScore(),
+        };
+      }
+
+      // Backward compatible migration from legacy single-score key
+      const legacySaved = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacySaved) {
+        const legacyScore = JSON.parse(legacySaved);
+        return {
+          bot: legacyScore,
+          pvp: defaultScore(),
+          online: defaultScore(),
+        };
+      }
     } catch {
       // ignore
     }
-    return { playerX: 0, playerO: 0, draws: 0, currentStreak: 0, bestStreak: 0 };
+    return {
+      bot: defaultScore(),
+      pvp: defaultScore(),
+      online: defaultScore(),
+    };
   });
 
-  // Save scores to localStorage
+  // Current active mode score
+  const score: GameScore = allScores[opponent] || defaultScore();
+
+  // Save segregated scores to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(score));
+      localStorage.setItem(SCORES_STORAGE_KEY, JSON.stringify(allScores));
     } catch {
       // ignore
     }
-  }, [score]);
+  }, [allScores]);
+
+  // Update current mode score
+  const setScore = useCallback(
+    (updater: GameScore | ((prev: GameScore) => GameScore)) => {
+      setAllScores((prev) => {
+        const currentModeScore = prev[opponent] || defaultScore();
+        const nextScore = typeof updater === 'function' ? updater(currentModeScore) : updater;
+        return {
+          ...prev,
+          [opponent]: nextScore,
+        };
+      });
+    },
+    [opponent]
+  );
 
   // Reset board when Game Mode changes
   useEffect(() => {
@@ -134,14 +187,13 @@ export function useGameEngine({
     setBlitzTimeLeft(blitzDuration);
   }, [mode, roundNumber, startingPlayer, blitzDuration, getStartingPlayer]);
 
-  // Reset Scores
+  // Reset Scores for active mode
   const resetScores = useCallback(() => {
     sound.playClick();
-    const cleared: GameScore = { playerX: 0, playerO: 0, draws: 0, currentStreak: 0, bestStreak: 0 };
+    const cleared = defaultScore();
     setScore(cleared);
-    localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(cleared));
     resetRound();
-  }, [resetRound]);
+  }, [resetRound, setScore]);
 
   // Core Move Execution Engine (Pure, clean, atomic)
   const applyMove = useCallback(
@@ -352,7 +404,9 @@ export function useGameEngine({
 
     const timer = setTimeout(() => {
       let botMove = -1;
-      if (mode === 'grid6x6') {
+      if (mode === 'grid12x12') {
+        botMove = getBestMove12x12(board, 'O', botDifficulty);
+      } else if (mode === 'grid6x6') {
         botMove = getBestMove6x6(board, 'O', botDifficulty);
       } else if (mode === 'grid4x4') {
         botMove = getBestMove4x4(board, 'O', botDifficulty);

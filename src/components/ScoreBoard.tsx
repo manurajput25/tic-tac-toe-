@@ -12,6 +12,9 @@ interface ScoreBoardProps {
   blitzDuration: number | null;
   roundNumber: number;
   isBotThinking: boolean;
+  playerXLabel?: string;
+  playerOLabel?: string;
+  onlineRoomCode?: string | null;
 }
 
 export const ScoreBoard: React.FC<ScoreBoardProps> = ({
@@ -24,6 +27,9 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
   blitzDuration,
   roundNumber,
   isBotThinking,
+  playerXLabel,
+  playerOLabel,
+  onlineRoomCode,
 }) => {
   const isXTurn = currentPlayer === 'X';
   const isOTurn = currentPlayer === 'O';
@@ -32,11 +38,30 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
   const difficultyLabel =
     botDifficulty === 'unbeatable' ? 'Master AI' : botDifficulty === 'medium' ? 'Tactician' : 'Casual';
 
+  const xDisplayName =
+    opponent === 'bot'
+      ? 'You'
+      : opponent === 'online'
+      ? playerXLabel || 'Host (X)'
+      : 'Player X';
+
+  const oDisplayName =
+    opponent === 'bot'
+      ? 'Gemini'
+      : opponent === 'online'
+      ? playerOLabel || 'Opponent (O)'
+      : 'Player O';
+
   return (
     <div className="w-full max-w-xl mx-auto mb-6">
       {/* Upper Meta line: Unboxed metadata with typographic separators */}
       <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-3 px-1.5 tabular-nums">
         <div className="flex items-center gap-2">
+          {onlineRoomCode && (
+            <span className="font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
+              Room: {onlineRoomCode}
+            </span>
+          )}
           <span className="font-semibold text-slate-700 dark:text-slate-300">Round {roundNumber}</span>
           <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
           <span>Draws: {score.draws}</span>
@@ -92,8 +117,10 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide">Player X</span>
-                  <User className="w-3 h-3 text-slate-400" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide truncate max-w-[100px] sm:max-w-[130px]">
+                    {xDisplayName}
+                  </span>
+                  <User className="w-3 h-3 text-slate-400 shrink-0" />
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                   {isXTurn ? (
@@ -152,13 +179,13 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide">
-                    {opponent === 'bot' ? 'Gemini' : 'Player O'}
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide truncate max-w-[100px] sm:max-w-[130px]">
+                    {oDisplayName}
                   </span>
                   {opponent === 'bot' ? (
-                    <Bot className="w-3 h-3 text-cyan-500 dark:text-cyan-400" />
+                    <Bot className="w-3 h-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
                   ) : (
-                    <User className="w-3 h-3 text-slate-400" />
+                    <User className="w-3 h-3 text-slate-400 shrink-0" />
                   )}
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">

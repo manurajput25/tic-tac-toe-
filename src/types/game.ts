@@ -1,8 +1,8 @@
 export type Player = 'X' | 'O';
 export type CellValue = Player | null;
 
-export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4' | 'grid6x6';
-export type OpponentType = 'bot' | 'pvp';
+export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4' | 'grid6x6' | 'grid12x12';
+export type OpponentType = 'bot' | 'pvp' | 'online';
 export type BotDifficulty = 'easy' | 'medium' | 'unbeatable';
 
 export interface MoveRecord {
@@ -28,6 +28,86 @@ export interface GameScore {
   bestStreak: number;
 }
 
+export interface ModeScores {
+  bot: GameScore;
+  pvp: GameScore;
+  online: GameScore;
+}
+
+export type PaletteVibe = 'neon' | 'minimalist';
+
+export interface CustomPalette {
+  id: string;
+  name: string;
+  vibe: PaletteVibe;
+  xColor: string;
+  xGlow: string;
+  oColor: string;
+  oGlow: string;
+  gridBorder: string;
+  cellBg?: string;
+  accentBg?: string;
+  createdAt: string;
+}
+
+export interface UserProfile {
+  uid: string;
+  username: string;
+  displayName: string;
+  avatar: string; // avatar key or URL
+  title?: string; // e.g. 'Tactician', 'Grandmaster'
+  email?: string | null;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  bestStreak: number;
+  customPalettes?: CustomPalette[];
+  activePaletteId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface OnlineRoom {
+  id: string;
+  mode: GameMode;
+  status: 'waiting' | 'playing' | 'completed' | 'abandoned';
+  hostId: string;
+  hostName: string;
+  hostAvatar: string;
+  hostMark: Player;
+  guestId?: string | null;
+  guestName?: string | null;
+  guestAvatar?: string | null;
+  guestMark?: Player | null;
+  currentTurn: Player;
+  board: (Player | null)[];
+  xPieceIndices?: number[];
+  oPieceIndices?: number[];
+  winner?: Player | 'draw' | null;
+  winningLine?: WinningLine | null;
+  lastMoveIndex?: number | null;
+  lastEmote?: {
+    senderId: string;
+    senderName: string;
+    emoji: string;
+    timestamp: number;
+  } | null;
+  messages?: ChatMessage[];
+  rematchRequestedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ColorMode = 'light' | 'dark' | 'system';
 
 export type ThemeId =
@@ -37,7 +117,8 @@ export type ThemeId =
   | 'monochrome'
   | 'cosmic-gold'
   | 'synthwave-retro'
-  | 'crimson-shadow';
+  | 'crimson-shadow'
+  | string;
 
 export interface ThemeConfig {
   id: ThemeId;
@@ -50,6 +131,8 @@ export interface ThemeConfig {
   gridBorder: string;
   cellBg: string;
   cellHover: string;
+  vibe?: PaletteVibe;
+  isCustom?: boolean;
 }
 
 export interface InfinitePiece {

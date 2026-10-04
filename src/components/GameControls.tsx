@@ -1,6 +1,6 @@
 import React from 'react';
 import { OpponentType, BotDifficulty, GameMode } from '../types/game';
-import { Lightbulb, Bot, Users } from 'lucide-react';
+import { Lightbulb, Bot, Users, Globe } from 'lucide-react';
 
 interface GameControlsProps {
   opponent: OpponentType;
@@ -12,6 +12,7 @@ interface GameControlsProps {
   isGameOver: boolean;
   canHint: boolean;
   gameMode: GameMode;
+  onOpenOnlineLobby?: () => void;
 }
 
 export const GameControls: React.FC<GameControlsProps> = ({
@@ -23,6 +24,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
   isGameOver,
   canHint,
   gameMode,
+  onOpenOnlineLobby,
 }) => {
   return (
     <div className="w-full max-w-xl mx-auto mt-6 flex flex-col gap-3">
@@ -32,9 +34,9 @@ export const GameControls: React.FC<GameControlsProps> = ({
         <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950/80 p-1 rounded-xl border border-slate-200 dark:border-slate-800/90">
           <button
             onClick={() => onChangeOpponent('bot')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
               opponent === 'bot'
-                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80'
+                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
@@ -43,14 +45,28 @@ export const GameControls: React.FC<GameControlsProps> = ({
           </button>
           <button
             onClick={() => onChangeOpponent('pvp')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
               opponent === 'pvp'
-                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80'
+                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
             <span>2 Players</span>
+          </button>
+          <button
+            onClick={() => {
+              onChangeOpponent('online');
+              if (onOpenOnlineLobby) onOpenOnlineLobby();
+            }}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              opponent === 'online'
+                ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5 text-cyan-500" />
+            <span>Online</span>
           </button>
         </div>
 

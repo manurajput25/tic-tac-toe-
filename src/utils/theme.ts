@@ -1,4 +1,4 @@
-import { ThemeConfig, ThemeId, BackgroundThemeId } from '../types/game';
+import { ThemeConfig, ThemeId, BackgroundThemeId, CustomPalette } from '../types/game';
 
 export interface EnhancedThemeConfig extends ThemeConfig {
   xGradient: string;
@@ -217,4 +217,30 @@ export const BACKGROUND_THEMES: Record<BackgroundThemeId, BackgroundThemeConfig>
     previewGradient: 'from-black via-zinc-950 to-black',
   },
 };
+
+export function customPaletteToTheme(palette: CustomPalette): EnhancedThemeConfig {
+  const isNeon = palette.vibe === 'neon';
+  return {
+    id: palette.id,
+    name: palette.name,
+    xColor: palette.xColor,
+    xGlow: palette.xGlow || (isNeon ? `${palette.xColor}99` : 'transparent'),
+    xGradient: isNeon
+      ? 'from-cyan-400 via-sky-400 to-blue-500'
+      : 'from-slate-200 via-slate-300 to-slate-400',
+    oColor: palette.oColor,
+    oGlow: palette.oGlow || (isNeon ? `${palette.oColor}99` : 'transparent'),
+    oGradient: isNeon
+      ? 'from-rose-400 via-pink-500 to-fuchsia-500'
+      : 'from-slate-300 via-slate-400 to-slate-500',
+    accentBg: palette.accentBg || (isNeon ? 'from-cyan-950/30 via-slate-900/50 to-rose-950/30' : 'from-slate-900/40 via-slate-900/70 to-slate-900/40'),
+    gridBorder: palette.gridBorder || (isNeon ? 'border-cyan-500/30' : 'border-slate-700/40'),
+    cellBg: palette.cellBg || (isNeon ? 'bg-slate-900/80' : 'bg-slate-950/90'),
+    cellHover: 'hover:bg-slate-800/90',
+    cardGlow: isNeon ? `${palette.xColor}33` : 'rgba(0,0,0,0.2)',
+    ambientLight: isNeon ? `${palette.xColor}25` : 'rgba(255,255,255,0.03)',
+    vibe: palette.vibe,
+    isCustom: true,
+  };
+}
 

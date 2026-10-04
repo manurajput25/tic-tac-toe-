@@ -52,10 +52,17 @@ export const Board: React.FC<BoardProps> = ({
 }) => {
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
 
+  const is12x12 = mode === 'grid12x12';
   const is6x6 = mode === 'grid6x6';
   const is4x4 = mode === 'grid4x4';
-  const size = is6x6 ? 6 : is4x4 ? 4 : 3;
-  const gridColsClass = is6x6 ? 'grid-cols-6' : is4x4 ? 'grid-cols-4' : 'grid-cols-3';
+  const size = is12x12 ? 12 : is6x6 ? 6 : is4x4 ? 4 : 3;
+  const gridColsClass = is12x12
+    ? 'grid-cols-12'
+    : is6x6
+    ? 'grid-cols-6'
+    : is4x4
+    ? 'grid-cols-4'
+    : 'grid-cols-3';
 
   // Determine if a cell is the oldest for X or O in infinite mode
   const getInfiniteInfo = (index: number) => {
@@ -96,12 +103,16 @@ export const Board: React.FC<BoardProps> = ({
 
   // Compute cell classes based on CellFinish & BoardStyle
   const getCellClasses = (canClick: boolean, isWinning: boolean, isHint: boolean) => {
-    let base = 'relative rounded-2xl flex items-center justify-center transition-all duration-200 focus:outline-none select-none overflow-hidden group border';
+    let base = is12x12
+      ? 'relative rounded-[3px] sm:rounded-md flex items-center justify-center transition-all duration-150 focus:outline-none select-none overflow-hidden group border'
+      : 'relative rounded-2xl flex items-center justify-center transition-all duration-200 focus:outline-none select-none overflow-hidden group border';
 
-    if (customization.style === 'cyber-matrix') {
-      base += ' rounded-lg';
-    } else if (customization.style === 'minimal-clean') {
-      base += ' rounded-2xl';
+    if (!is12x12) {
+      if (customization.style === 'cyber-matrix') {
+        base += ' rounded-lg';
+      } else if (customization.style === 'minimal-clean') {
+        base += ' rounded-2xl';
+      }
     }
 
     // Cell surface finishes
@@ -119,15 +130,21 @@ export const Board: React.FC<BoardProps> = ({
     }
 
     if (canClick) {
-      base += ' cursor-pointer hover:scale-[1.03] active:scale-[0.97] hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)]';
+      base += is12x12
+        ? ' cursor-pointer hover:scale-[1.08] active:scale-[0.95] hover:z-20 hover:shadow-md'
+        : ' cursor-pointer hover:scale-[1.03] active:scale-[0.97] hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)]';
     } else {
       base += ' cursor-default';
     }
 
     if (isWinning) {
-      base += ' ring-2 ring-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.4)] bg-emerald-50 dark:bg-emerald-950/30';
+      base += is12x12
+        ? ' ring-1 sm:ring-2 ring-emerald-400 bg-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.8)] z-10'
+        : ' ring-2 ring-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.4)] bg-emerald-50 dark:bg-emerald-950/30';
     } else if (isHint) {
-      base += ' ring-2 ring-amber-500 shadow-[0_0_20px_rgba(251,191,36,0.4)] bg-amber-50 dark:bg-amber-950/30 animate-pulse';
+      base += is12x12
+        ? ' ring-1 sm:ring-2 ring-amber-400 bg-amber-500/30 animate-pulse z-10'
+        : ' ring-2 ring-amber-500 shadow-[0_0_20px_rgba(251,191,36,0.4)] bg-amber-50 dark:bg-amber-950/30 animate-pulse';
     }
 
     return base;
@@ -136,20 +153,34 @@ export const Board: React.FC<BoardProps> = ({
   return (
     <div
       className={`relative mx-auto w-full ${
-        is6x6 ? 'max-w-[min(92vw,480px)]' : is4x4 ? 'max-w-[min(92vw,440px)]' : 'max-w-[min(92vw,420px)]'
+        is12x12
+          ? 'max-w-[min(96vw,560px)]'
+          : is6x6
+          ? 'max-w-[min(92vw,480px)]'
+          : is4x4
+          ? 'max-w-[min(92vw,440px)]'
+          : 'max-w-[min(92vw,420px)]'
       } aspect-square transition-all duration-500`}
     >
-      {/* Optional Board Coordinates (A-C / 1-3) */}
+      {/* Optional Board Coordinates (A-L / 1-12) */}
       {customization.showCoordinates && (
         <>
-          {/* Top Column labels A, B, C */}
-          <div className={`absolute -top-5 inset-x-4 grid ${gridColsClass} text-center text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 pointer-events-none select-none tracking-widest`}>
+          {/* Top Column labels A..L */}
+          <div
+            className={`absolute -top-5 inset-x-2 sm:inset-x-4 grid ${gridColsClass} text-center ${
+              is12x12 ? 'text-[8px]' : 'text-[10px]'
+            } font-mono font-bold text-slate-400 dark:text-slate-500 pointer-events-none select-none tracking-tighter sm:tracking-widest`}
+          >
             {Array.from({ length: size }).map((_, i) => (
               <span key={i}>{String.fromCharCode(65 + i)}</span>
             ))}
           </div>
-          {/* Left Row labels 1, 2, 3 */}
-          <div className="absolute -left-5 inset-y-4 flex flex-col justify-around text-center text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 pointer-events-none select-none">
+          {/* Left Row labels 1..12 */}
+          <div
+            className={`absolute -left-5 inset-y-2 sm:inset-y-4 flex flex-col justify-around text-center ${
+              is12x12 ? 'text-[8px]' : 'text-[10px]'
+            } font-mono font-bold text-slate-400 dark:text-slate-500 pointer-events-none select-none`}
+          >
             {Array.from({ length: size }).map((_, i) => (
               <span key={i}>{i + 1}</span>
             ))}
@@ -168,8 +199,18 @@ export const Board: React.FC<BoardProps> = ({
         />
       )}
 
+      {/* 12x12 Win Condition Indicator Banner */}
+      {is12x12 && (
+        <div className="mb-2.5 flex items-center justify-center">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 shadow-sm">
+            <span>🎯</span>
+            <span><strong>Target:</strong> Connect 6 in a row to win!</span>
+          </span>
+        </div>
+      )}
+
       {/* Board Chassis Container */}
-      <div className={`relative w-full h-full p-3 sm:p-4 ${getBoardChassisClasses()}`}>
+      <div className={`relative w-full h-full ${is12x12 ? 'p-1.5 sm:p-2.5' : 'p-3 sm:p-4'} ${getBoardChassisClasses()}`}>
         {/* Top metallic bevel reflection */}
         {customization.style === 'glass-stadium' && (
           <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-slate-300 dark:via-white/20 to-transparent pointer-events-none" />
@@ -190,7 +231,7 @@ export const Board: React.FC<BoardProps> = ({
           role="grid"
           aria-label="Tic-Tac-Toe Game Board"
           className={`relative z-10 w-full h-full grid ${gridColsClass} ${
-            is6x6 ? 'gap-1 sm:gap-2' : is4x4 ? 'gap-2 sm:gap-2.5' : 'gap-2.5 sm:gap-3'
+            is12x12 ? 'gap-0.5 sm:gap-1' : is6x6 ? 'gap-1 sm:gap-2' : is4x4 ? 'gap-2 sm:gap-2.5' : 'gap-2.5 sm:gap-3'
           }`}
         >
           {board.map((cell, index) => {
@@ -230,7 +271,7 @@ export const Board: React.FC<BoardProps> = ({
                   <MarkIcon
                     player={cell}
                     theme={theme}
-                    size={is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
+                    size={is12x12 ? 'xs' : is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
                     isExpiring={isExpiring}
                     orderNumber={order}
                     markStyle={customization.markStyle}
@@ -243,7 +284,7 @@ export const Board: React.FC<BoardProps> = ({
                       <MarkIcon
                         player={currentPlayer}
                         theme={theme}
-                        size={is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
+                        size={is12x12 ? 'xs' : is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
                         animated={false}
                         markStyle={customization.markStyle}
                       />
@@ -253,10 +294,14 @@ export const Board: React.FC<BoardProps> = ({
 
                 {/* Hint badge */}
                 {isHint && (
-                  <div className="absolute top-1.5 right-2 flex items-center gap-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-300 font-mono tracking-wider bg-amber-100 dark:bg-amber-950/90 px-1.5 py-0.5 rounded-full border border-amber-500/50 shadow-sm">
-                    <Sparkles className="w-2.5 h-2.5 text-amber-500 dark:text-amber-400" />
-                    <span>BEST</span>
-                  </div>
+                  is12x12 ? (
+                    <div className="absolute inset-0 bg-amber-400/40 animate-pulse pointer-events-none" />
+                  ) : (
+                    <div className="absolute top-1.5 right-2 flex items-center gap-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-300 font-mono tracking-wider bg-amber-100 dark:bg-amber-950/90 px-1.5 py-0.5 rounded-full border border-amber-500/50 shadow-sm">
+                      <Sparkles className="w-2.5 h-2.5 text-amber-500 dark:text-amber-400" />
+                      <span>BEST</span>
+                    </div>
+                  )
                 )}
               </button>
             );

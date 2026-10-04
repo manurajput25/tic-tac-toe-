@@ -16,6 +16,8 @@
         "losses": { "type": "number", "description": "Matches lost" },
         "draws": { "type": "number", "description": "Matches drawn" },
         "bestStreak": { "type": "number", "description": "Highest win streak" },
+        "customPalettes": { "type": "array", "description": "User saved custom color palettes for grid and pieces" },
+        "activePaletteId": { "type": "string", "description": "Currently active custom palette ID if selected" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Last profile update timestamp" }
       },
