@@ -104,8 +104,11 @@ interface StoredUserAccount {
   uid: string;
   email: string;
   displayName: string;
-  username: string;
+  username: string; // unique, permanent handle based on email
   avatar: string;
+  photoURL?: string | null;
+  bio?: string;
+  website?: string;
   title: string;
   totalGames: number;
   wins: number;
@@ -119,6 +122,25 @@ interface StoredUserAccount {
 }
 
 const accountsByEmail = new Map<string, StoredUserAccount>();
+
+// Generates a unique, non-changeable gamer handle based on user email
+function generateUniqueHandleFromEmail(
+  email: string,
+  existingAccounts: Map<string, StoredUserAccount>
+): string {
+  const rawPrefix =
+    email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16) || 'player';
+  let candidate = rawPrefix;
+  const takenHandles = new Set(
+    Array.from(existingAccounts.values()).map((a) => a.username.toLowerCase())
+  );
+  let counter = 1;
+  while (takenHandles.has(candidate)) {
+    candidate = `${rawPrefix.slice(0, 12)}_${counter}`;
+    counter++;
+  }
+  return candidate;
+}
 
 function loadAccountsFromDisk() {
   try {
@@ -154,6 +176,9 @@ interface PendingVerification {
   displayName: string;
   username?: string;
   avatar?: string;
+  photoURL?: string | null;
+  bio?: string;
+  website?: string;
   password?: string;
   expiresAt: number;
 }
@@ -232,6 +257,9 @@ async function startServer() {
     const displayName = String(req.body.displayName || email.split('@')[0]).trim();
     const username = String(req.body.username || email.split('@')[0]).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     const avatar = String(req.body.avatar || 'cyber-ninja');
+    const photoURL = req.body.photoURL ? String(req.body.photoURL) : null;
+    const bio = req.body.bio ? String(req.body.bio).slice(0, 300) : '';
+    const website = req.body.website ? String(req.body.website).slice(0, 200) : '';
     const password = String(req.body.password || '');
 
     if (!email || !email.includes('@') || !email.includes('.')) {
@@ -254,6 +282,9 @@ async function startServer() {
       displayName,
       username,
       avatar,
+      photoURL,
+      bio,
+      website,
       password,
       expiresAt: Date.now() + 10 * 60 * 1000,
     });
@@ -301,14 +332,20 @@ async function startServer() {
       });
     }
 
+    // Generate unique, non-changeable gamer handle based on user email
+    const uniqueHandle = generateUniqueHandleFromEmail(email, accountsByEmail);
+
     // Create verified account
     const uid = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newAccount: StoredUserAccount = {
       uid,
       email,
       displayName: pending.displayName || email.split('@')[0],
-      username: (pending.username || email.split('@')[0]).replace(/[^a-z0-9_]/g, '').slice(0, 20),
+      username: uniqueHandle, // UNIQUE PERMANENT HANDLE BASED ON EMAIL
       avatar: pending.avatar || 'cyber-ninja',
+      photoURL: pending.photoURL || null,
+      bio: pending.bio || '',
+      website: pending.website || '',
       title: 'Arena Tactician',
       totalGames: 0,
       wins: 0,
@@ -359,7 +396,7 @@ async function startServer() {
     });
   });
 
-  // Save profile updates
+  // Save profile updates (display name, bio, website, avatar can be updated; username is permanently locked)
   app.post('/api/auth/save-profile', (req: Request, res: Response) => {
     const profile = req.body.profile as StoredUserAccount;
     if (!profile || !profile.email) {
@@ -370,6 +407,10 @@ async function startServer() {
     const merged: StoredUserAccount = {
       ...(existing || {}),
       ...profile,
+      // Display name is changeable, but gamer handle is unique & permanently locked
+      username: existing ? existing.username : profile.username,
+      bio: profile.bio ? String(profile.bio).slice(0, 300) : (existing?.bio || ''),
+      website: profile.website ? String(profile.website).slice(0, 200) : (existing?.website || ''),
       email,
       updatedAt: new Date().toISOString(),
     };

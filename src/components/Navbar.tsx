@@ -1,7 +1,7 @@
 import React from 'react';
 import { Globe } from 'lucide-react';
 import { GameMode, UserProfile } from '../types/game';
-import { AVATAR_PRESETS } from '../utils/firebase';
+import { UserAvatar } from './UserAvatar';
 
 interface NavbarProps {
   currentMode: GameMode;
@@ -20,8 +20,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   profile,
   isOnlineActive,
 }) => {
-  const activeAvatar =
-    AVATAR_PRESETS.find((a) => a.id === profile?.avatar) || AVATAR_PRESETS[0];
   return (
     <header className="w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl sticky top-0 z-40 transition-colors">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-3">
@@ -122,16 +120,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-sm active:scale-95 group"
             title={profile?.email ? `Logged in as ${profile.email}` : 'Gamer Profile & Account'}
           >
-            <div className="relative">
-              <div
-                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-gradient-to-br ${activeAvatar.gradient} flex items-center justify-center text-xs shadow-sm shrink-0`}
-              >
-                <span>{activeAvatar.emoji}</span>
-              </div>
-              {profile?.isVerified && profile?.email && (
-                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white dark:border-slate-900" />
-              )}
-            </div>
+            <UserAvatar
+              avatar={profile?.avatar}
+              photoURL={profile?.photoURL}
+              size="xs"
+              showVerifiedBadge={Boolean(profile?.isVerified && profile?.email)}
+            />
             <span className="hidden lg:inline font-semibold truncate max-w-[90px]">
               {profile?.displayName || 'Profile'}
             </span>

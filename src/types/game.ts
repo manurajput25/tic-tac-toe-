@@ -1,3 +1,16 @@
+export type SoundPackId = 'cyberpunk' | 'retro-arcade' | 'zen-minimalist' | 'quantum-scifi';
+
+export interface SoundPackConfig {
+  id: SoundPackId;
+  name: string;
+  tagline: string;
+  icon: string;
+  description: string;
+  badge: string;
+  vibeGradient: string;
+  previewNote: string;
+}
+
 export type Player = 'X' | 'O';
 export type CellValue = Player | null;
 
@@ -55,6 +68,9 @@ export interface UserProfile {
   username: string;
   displayName: string;
   avatar: string; // avatar key or URL
+  photoURL?: string | null; // Custom uploaded user picture (data URL or web URL)
+  bio?: string; // User bio and details
+  website?: string; // External portfolio, social or website link
   title?: string; // e.g. 'Tactician', 'Grandmaster'
   email?: string | null;
   totalGames: number;

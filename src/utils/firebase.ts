@@ -247,7 +247,10 @@ export async function sendEmailVerificationCode(
   displayName?: string,
   username?: string,
   avatar?: string,
-  password?: string
+  password?: string,
+  photoURL?: string | null,
+  bio?: string,
+  website?: string
 ): Promise<{ success: boolean; message: string; code?: string; isExistingUser?: boolean }> {
   const cleanEmail = email.trim().toLowerCase();
   const res = await fetch('/api/auth/send-code', {
@@ -259,6 +262,9 @@ export async function sendEmailVerificationCode(
       username,
       avatar,
       password,
+      photoURL,
+      bio,
+      website,
     }),
   });
   const data = await res.json();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, UserProfile } from '../types/game';
-import { AVATAR_PRESETS, sendRoomChatMessage } from '../utils/firebase';
+import { sendRoomChatMessage } from '../utils/firebase';
+import { UserAvatar } from './UserAvatar';
 import { sound } from '../utils/audio';
 import {
   MessageSquare,
@@ -79,10 +80,6 @@ export const GameChat: React.FC<GameChatProps> = ({
     );
   };
 
-  const getAvatarPreset = (avatarId: string) => {
-    return AVATAR_PRESETS.find((a) => a.id === avatarId) || AVATAR_PRESETS[0];
-  };
-
   return (
     <>
       {/* Floating Toggle Button (Bottom-Left) */}
@@ -157,7 +154,6 @@ export const GameChat: React.FC<GameChatProps> = ({
             ) : (
               messages.map((msg) => {
                 const isMe = msg.senderId === userProfile.uid;
-                const avatar = getAvatarPreset(msg.senderAvatar);
                 return (
                   <div
                     key={msg.id}
@@ -166,12 +162,12 @@ export const GameChat: React.FC<GameChatProps> = ({
                     }`}
                   >
                     {!isMe && (
-                      <div
-                        className={`w-6 h-6 rounded-lg bg-gradient-to-br ${avatar.gradient} flex items-center justify-center text-xs shrink-0 shadow-sm`}
-                        title={msg.senderName}
-                      >
-                        {avatar.emoji}
-                      </div>
+                      <UserAvatar
+                        avatar={msg.senderAvatar}
+                        size="xs"
+                        alt={msg.senderName}
+                        className="shadow-sm"
+                      />
                     )}
                     <div
                       className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs break-words shadow-sm ${

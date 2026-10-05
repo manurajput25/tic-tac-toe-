@@ -9,6 +9,8 @@
         "username": { "type": "string", "description": "Custom chosen unique handle", "maxLength": 30 },
         "displayName": { "type": "string", "description": "Public display name", "maxLength": 60 },
         "photoURL": { "type": "string", "description": "Avatar URL or preset avatar icon key" },
+        "bio": { "type": "string", "description": "User bio, playstyle, and background details", "maxLength": 300 },
+        "website": { "type": "string", "description": "User external profile or social link URL", "maxLength": 200 },
         "email": { "type": "string", "description": "User email address if authenticated via Google" },
         "phoneNumber": { "type": "string", "description": "Phone number if authenticated via phone OTP" },
         "totalGames": { "type": "number", "description": "Total matches played" },

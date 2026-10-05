@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { UserProfile } from '../types/game';
 import {
   AVATAR_PRESETS,
@@ -9,6 +9,8 @@ import {
   logoutUser,
   checkEmailRegistered,
 } from '../utils/firebase';
+import { processProfileImage } from '../utils/imageUpload';
+import { UserAvatar } from './UserAvatar';
 import { sound } from '../utils/audio';
 import {
   X,
@@ -25,8 +27,13 @@ import {
   CheckCircle2,
   AlertCircle,
   KeyRound,
-  RotateCcw,
   Sparkles,
+  Camera,
+  Upload,
+  Trash2,
+  FileText,
+  Globe,
+  ExternalLink,
 } from 'lucide-react';
 
 interface ProfileModalProps {
@@ -55,15 +62,25 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [displayName, setDisplayName] = useState<string>(
     currentProfile?.displayName || 'Apex Player'
   );
-  const [username, setUsername] = useState<string>(
-    currentProfile?.username || `apex_${Math.floor(1000 + Math.random() * 9000)}`
-  );
+  // Gamer handle is unique, email-based, and non-changeable
+  const username = currentProfile?.username || `apex_${Math.floor(1000 + Math.random() * 9000)}`;
+
   const [selectedAvatar, setSelectedAvatar] = useState<string>(
     currentProfile?.avatar || AVATAR_PRESETS[0].id
   );
   const [selectedTitle, setSelectedTitle] = useState<string>(
     currentProfile?.title || TITLES[0]
   );
+  const [customPhotoURL, setCustomPhotoURL] = useState<string | null>(
+    currentProfile?.photoURL || (currentProfile?.avatar?.startsWith('data:image') ? currentProfile.avatar : null)
+  );
+
+  // Bio & Personal Links State
+  const [bio, setBio] = useState<string>(currentProfile?.bio || '');
+  const [website, setWebsite] = useState<string>(currentProfile?.website || '');
+
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Authentication State
@@ -81,10 +98,35 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
-  const activeAvatar =
-    AVATAR_PRESETS.find((a) => a.id === selectedAvatar) || AVATAR_PRESETS[0];
+  // 1. Photo Upload Handler (compresses & center-crops 1:1)
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  // 1. Send Verification Code (Only for new accounts - "ek email se ek hi account bane")
+    setIsUploadingPhoto(true);
+    setAuthError(null);
+    try {
+      const dataUrl = await processProfileImage(file, 256, 0.85);
+      setCustomPhotoURL(dataUrl);
+      sound.playClick();
+      setAuthSuccess('Picture uploaded! Click "Save Profile Changes" to save permanently.');
+      setTimeout(() => setAuthSuccess(null), 3500);
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : 'Could not process image file');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    sound.playClick();
+    setCustomPhotoURL(null);
+    setAuthSuccess('Reverted to character preset');
+    setTimeout(() => setAuthSuccess(null), 2500);
+  };
+
+  // 2. Send Verification Code (Only for new accounts - "ek email se ek hi account bane")
   const handleSendVerificationCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = authEmail.trim().toLowerCase();
@@ -109,9 +151,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       const res = await sendEmailVerificationCode(
         cleanEmail,
         displayName.trim() || cleanEmail.split('@')[0],
-        username.trim() || cleanEmail.split('@')[0],
+        undefined, // handle generated uniquely on server from email
         selectedAvatar,
-        authPassword
+        authPassword,
+        customPhotoURL,
+        bio.trim(),
+        website.trim()
       );
 
       setIsCodeSent(true);
@@ -125,7 +170,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  // 2. Verify Code & Complete Registration
+  // 3. Verify Code & Complete Registration
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = verificationCode.trim();
@@ -146,8 +191,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       // Update app state with verified profile
       onSaveProfile(res.profile);
       setDisplayName(res.profile.displayName);
-      setUsername(res.profile.username);
       setSelectedAvatar(res.profile.avatar);
+      if (res.profile.photoURL) setCustomPhotoURL(res.profile.photoURL);
+      if (res.profile.bio) setBio(res.profile.bio);
+      if (res.profile.website) setWebsite(res.profile.website);
       setSelectedTitle(res.profile.title || TITLES[0]);
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : 'Invalid verification code');
@@ -156,7 +203,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  // 3. Log In to Existing Account
+  // 4. Log In to Existing Account
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = authEmail.trim().toLowerCase();
@@ -177,8 +224,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       // Update app profile
       onSaveProfile(res.profile);
       setDisplayName(res.profile.displayName);
-      setUsername(res.profile.username);
       setSelectedAvatar(res.profile.avatar);
+      if (res.profile.photoURL) setCustomPhotoURL(res.profile.photoURL);
+      if (res.profile.bio) setBio(res.profile.bio);
+      if (res.profile.website) setWebsite(res.profile.website);
       setSelectedTitle(res.profile.title || TITLES[0]);
       setTimeout(() => setAuthSuccess(null), 3000);
     } catch (err: unknown) {
@@ -188,7 +237,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  // 4. Log Out
+  // 5. Log Out
   const handleLogout = async () => {
     setAuthLoading(true);
     try {
@@ -196,8 +245,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       sound.playClick();
       onSaveProfile(guestProfile);
       setDisplayName(guestProfile.displayName);
-      setUsername(guestProfile.username);
       setSelectedAvatar(guestProfile.avatar);
+      setCustomPhotoURL(null);
+      setBio('');
+      setWebsite('');
       setAuthEmail('');
       setAuthPassword('');
       setIsCodeSent(false);
@@ -211,15 +262,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  // 5. Save Profile Details (Name, Avatar, Title) to Firestore
+  // 6. Save Profile Details (Name, Bio, Links, Photo, Avatar, Title) to Firestore
   const handleSaveProfileDetails = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!displayName.trim()) {
       setAuthError('Please enter a display name');
-      return;
-    }
-    if (!username.trim()) {
-      setAuthError('Please enter a gamer handle');
       return;
     }
 
@@ -227,11 +274,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     setAuthError(null);
     try {
       const uid = currentProfile?.uid || `anon_${Date.now()}`;
+      // Username is permanent, locked, and cannot be changed
+      const lockedUsername = currentProfile?.username || username;
+
       const updatedProfile: UserProfile = {
         uid,
         displayName: displayName.trim().slice(0, 24),
-        username: username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20),
+        username: lockedUsername, // PERMANENT UNIQUE HANDLE
         avatar: selectedAvatar,
+        photoURL: customPhotoURL,
+        bio: bio.trim().slice(0, 250),
+        website: website.trim().slice(0, 150),
         title: selectedTitle,
         email: currentProfile?.email || null,
         isVerified: currentProfile?.isVerified || false,
@@ -257,6 +310,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
+  const formattedWebsiteUrl = website.trim().startsWith('http://') || website.trim().startsWith('https://')
+    ? website.trim()
+    : `https://${website.trim()}`;
+
   return (
     <div
       role="dialog"
@@ -266,6 +323,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       <div className="relative w-full max-w-lg my-auto p-5 sm:p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl text-slate-900 dark:text-slate-100 overflow-hidden">
         {/* Top ambient highlight */}
         <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent pointer-events-none" />
+
+        {/* Hidden File Input for Image Upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handlePhotoSelect}
+          className="hidden"
+          aria-label="Upload profile photo"
+        />
 
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-200 dark:border-slate-800">
@@ -278,7 +345,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 {isCurrentlyLoggedIn ? 'Gamer Profile & Account' : 'Account & Gamer Profile'}
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Persistent cloud records & multiplayer identification
+                Personal bio, links, custom photo & unique gamer handle
               </p>
             </div>
           </div>
@@ -305,15 +372,26 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
         )}
 
-        {/* Live Identity Card Banner */}
+        {/* Live Identity Card Banner Preview */}
         <div className="mb-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 text-white shadow-lg relative overflow-hidden">
           <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
-          <div className="flex items-center gap-3.5 relative z-10">
-            {/* Avatar preview */}
+          <div className="flex items-start gap-3.5 relative z-10">
+            {/* Clickable Avatar preview with camera overlay */}
             <div
-              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br ${activeAvatar.gradient} flex items-center justify-center text-xl sm:text-2xl shadow-lg border-2 border-white/20 shrink-0`}
+              onClick={() => fileInputRef.current?.click()}
+              className="relative group cursor-pointer shrink-0 mt-0.5"
+              title="Click to upload profile photo"
             >
-              <span>{activeAvatar.emoji}</span>
+              <UserAvatar
+                avatar={selectedAvatar}
+                photoURL={customPhotoURL}
+                size="lg"
+                showVerifiedBadge={isCurrentlyLoggedIn}
+              />
+              <div className="absolute inset-0 bg-slate-950/60 rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all duration-200 text-cyan-400">
+                <Camera className="w-4 h-4" />
+                <span className="text-[8px] font-bold mt-0.5">Upload</span>
+              </div>
             </div>
 
             <div className="min-w-0 flex-1">
@@ -325,12 +403,44 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   {selectedTitle}
                 </span>
               </div>
-              <div className="text-[11px] sm:text-xs text-slate-400 font-mono truncate">
-                @{username.toLowerCase() || 'player'}
+
+              {/* Unique Locked Handle Badge */}
+              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] sm:text-xs text-slate-400 font-mono">
+                <span>@{username.toLowerCase()}</span>
+                <span className="flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-slate-800 border border-slate-700 text-[9px] text-cyan-400">
+                  <Lock className="w-2.5 h-2.5" />
+                  <span>Unique Handle</span>
+                </span>
               </div>
 
+              {/* Live Bio Preview */}
+              {bio.trim() && (
+                <p className="text-[11px] text-slate-300 italic mt-1.5 leading-relaxed line-clamp-2">
+                  "{bio.trim()}"
+                </p>
+              )}
+
+              {/* Live Website / Link Preview */}
+              {website.trim() && (
+                <div className="mt-1">
+                  <a
+                    href={formattedWebsiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-mono hover:underline"
+                    title={formattedWebsiteUrl}
+                  >
+                    <Globe className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate max-w-[200px]">
+                      {website.trim().replace(/^https?:\/\//, '')}
+                    </span>
+                    <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                  </a>
+                </div>
+              )}
+
               {/* Stats badges */}
-              <div className="flex items-center gap-2.5 mt-1.5 text-[11px] text-slate-300">
+              <div className="flex items-center gap-2.5 mt-2 text-[11px] text-slate-300">
                 <span className="flex items-center gap-1">
                   <Trophy className="w-3 h-3 text-amber-400" />
                   <strong className="text-white">{currentProfile?.wins || 0}</strong> Wins
@@ -345,7 +455,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
         </div>
 
-        {/* ---------------- SECTION 1: EMAIL ACCOUNT MANAGEMENT ---------------- */}
+        {/* ---------------- SECTION 1: EMAIL ACCOUNT & LOGOUT ---------------- */}
         <div className="mb-5 p-3.5 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800">
           {isCurrentlyLoggedIn ? (
             /* Logged-In State with Logout Option */
@@ -584,16 +694,104 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           )}
         </div>
 
-        {/* ---------------- SECTION 2: AVATAR & DISPLAY CUSTOMIZATION ---------------- */}
+        {/* ---------------- SECTION 2: PROFILE DETAILS, BIO & AVATAR ---------------- */}
         <form onSubmit={handleSaveProfileDetails} className="space-y-4">
-          {/* Avatar Selection Grid */}
+          {/* PROFILE PHOTO UPLOADER */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              Choose Arena Avatar
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Profile Picture / Photo</span>
+              </label>
+              {customPhotoURL && (
+                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Custom Photo Active</span>
+                </span>
+              )}
+            </div>
+
+            {customPhotoURL ? (
+              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-3 min-w-0">
+                  <img
+                    src={customPhotoURL}
+                    alt="Custom Profile"
+                    className="w-12 h-12 rounded-xl object-cover border-2 border-cyan-400 shadow-md shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      Your Uploaded Picture
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      Shown across game matches & scoreboard
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                    className="px-2.5 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-cyan-500" />
+                    <span>Change</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="p-1.5 text-xs font-semibold rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer"
+                    title="Remove custom photo and use character preset"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3.5 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700/80 hover:border-cyan-500 dark:hover:border-cyan-400 bg-slate-50/70 dark:bg-slate-950/40 hover:bg-cyan-500/5 transition-all cursor-pointer flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-500 group-hover:scale-110 transition-transform">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-cyan-500 transition-colors">
+                      {isUploadingPhoto ? 'Uploading & Cropping...' : 'Upload Profile Picture'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Upload from phone, camera or computer (JPG, PNG, WebP)
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-cyan-500 group-hover:bg-cyan-400 text-slate-950 shadow-sm pointer-events-none shrink-0"
+                >
+                  Browse
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Character Avatar Preset Options */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Or Pick an Arena Character Preset
+              </label>
+              {customPhotoURL && (
+                <span className="text-[10px] text-slate-400">
+                  (Selecting a preset will use that avatar)
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-4 gap-2">
               {AVATAR_PRESETS.map((preset) => {
-                const isSelected = selectedAvatar === preset.id;
+                const isSelected = selectedAvatar === preset.id && !customPhotoURL;
                 return (
                   <button
                     key={preset.id}
@@ -601,6 +799,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     onClick={() => {
                       sound.playClick();
                       setSelectedAvatar(preset.id);
+                      setCustomPhotoURL(null); // Switching to preset
                     }}
                     className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${
                       isSelected
@@ -622,40 +821,94 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
           </div>
 
-          {/* Form Fields: Display Name & Handle */}
+          {/* Form Fields: Display Name (Changeable) & Gamer Handle (Locked/Permanent) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Display Name
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Display Name
+                </label>
+                <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-semibold">Changeable</span>
+              </div>
               <input
                 type="text"
                 value={displayName}
                 maxLength={24}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="e.g. Manu, ApexMaster"
-                className="w-full px-3 py-1.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white"
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Gamer Handle (@tag)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <span>Gamer Handle (@tag)</span>
+                </label>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-bold">
+                  Permanent & Unique
+                </span>
+              </div>
               <div className="relative">
-                <span className="absolute left-3 top-1.5 text-slate-400 text-xs font-mono">@</span>
+                <span className="absolute left-3 top-2 text-slate-400 text-xs font-mono select-none">@</span>
                 <input
                   type="text"
                   value={username}
-                  maxLength={20}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                  placeholder="username"
-                  className="w-full pl-7 pr-3 py-1.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-mono"
-                  required
+                  readOnly
+                  disabled
+                  className="w-full pl-7 pr-8 py-2 text-xs sm:text-sm bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl text-slate-500 dark:text-slate-400 font-mono cursor-not-allowed select-none"
+                  title="Gamer handle is unique to your verified account and cannot be modified."
                 />
+                <Lock className="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400" />
               </div>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                Unique handle based on your email. Permanent and cannot be changed.
+              </p>
             </div>
+          </div>
+
+          {/* BIO / DETAILS ABOUT YOURSELF */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-cyan-500" />
+                <span>About Yourself (Bio)</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {bio.length}/250
+              </span>
+            </div>
+            <textarea
+              value={bio}
+              maxLength={250}
+              onChange={(e) => setBio(e.target.value)}
+              rows={2}
+              placeholder="Tell opponents about your playstyle, opening tactics, or personal bio..."
+              className="w-full px-3 py-2 text-xs sm:text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white resize-none leading-relaxed"
+            />
+          </div>
+
+          {/* PERSONAL LINKS & SOCIALS */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Social Links & Details
+            </label>
+            <div className="relative">
+              <Globe className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                value={website}
+                maxLength={150}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="e.g. twitter.com/username, github.com/user, or portfolio"
+                className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-mono"
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Add your website, YouTube, Discord, Twitter/X, or GitHub profile.
+            </p>
           </div>
 
           {/* Title Badges */}
@@ -683,28 +936,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Palette Studio Shortcut */}
-          {onOpenPaletteStudio && (
-            <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Palette className="w-3.5 h-3.5 text-cyan-500" />
-                <span className="text-xs font-bold text-slate-900 dark:text-white">
-                  Custom Palettes Studio
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  sound.playClick();
-                  onOpenPaletteStudio();
-                }}
-                className="px-2.5 py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-sm cursor-pointer active:scale-95"
-              >
-                Open Studio
-              </button>
-            </div>
-          )}
 
           {/* Modal Footer Controls */}
           <div className="flex items-center gap-2 pt-2">
