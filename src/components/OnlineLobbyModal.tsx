@@ -3,6 +3,7 @@ import { GameMode, UserProfile, OnlineRoom } from '../types/game';
 import {
   createOnlineRoom,
   joinOnlineRoom,
+  subscribeToOnlineRoom,
   subscribeToOpenRooms,
   generateRoomCode,
   AVATAR_PRESETS,
@@ -16,11 +17,14 @@ import {
   Copy,
   Check,
   Users,
-  Flame,
-  User,
   Radio,
-  Sparkles,
   RefreshCw,
+  AlertCircle,
+  Clock,
+  SearchX,
+  WifiOff,
+  Loader2,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface OnlineLobbyModalProps {
@@ -28,6 +32,14 @@ interface OnlineLobbyModalProps {
   onOpenProfile: () => void;
   onRoomJoined: (room: OnlineRoom, isHost: boolean) => void;
   onClose: () => void;
+}
+
+interface JoinErrorFeedback {
+  type: 'invalid-code' | 'not-found' | 'inactive' | 'full' | 'network' | 'general';
+  title: string;
+  message: string;
+  codeAttempted?: string;
+  actionHint?: string;
 }
 
 export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
@@ -40,9 +52,11 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
   const [joinCode, setJoinCode] = useState<string>('');
   const [openRooms, setOpenRooms] = useState<OnlineRoom[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
+  const [errorFeedback, setErrorFeedback] = useState<JoinErrorFeedback | null>(null);
   const [waitingRoom, setWaitingRoom] = useState<OnlineRoom | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+  const [isRefreshingRooms, setIsRefreshingRooms] = useState<boolean>(false);
 
   // Subscribe to public open rooms waiting for an opponent
   useEffect(() => {
@@ -57,14 +71,11 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
   useEffect(() => {
     if (!waitingRoom) return;
 
-    let unsubRoom: (() => void) | undefined;
-    import('../utils/firebase').then(({ subscribeToOnlineRoom }) => {
-      unsubRoom = subscribeToOnlineRoom(waitingRoom.id, (updatedRoom) => {
-        if (updatedRoom.status === 'playing' && updatedRoom.guestId) {
-          sound.playWin();
-          onRoomJoined(updatedRoom, true);
-        }
-      });
+    const unsubRoom = subscribeToOnlineRoom(waitingRoom.id, (updatedRoom) => {
+      if (updatedRoom.status === 'playing' && updatedRoom.guestId) {
+        sound.playWin();
+        onRoomJoined(updatedRoom, true);
+      }
     });
 
     return () => {
@@ -74,21 +85,27 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
 
   const handleCreateRoom = async () => {
     setIsLoading(true);
-    setErrorMessage(null);
+    setErrorFeedback(null);
     try {
       sound.playClick();
       const room = await createOnlineRoom(selectedMode, userProfile);
       setWaitingRoom(room);
     } catch (err: unknown) {
-      console.warn('Primary room creation error, deploying fallback relay room:', err);
+      console.warn('Primary room creation warning, generating fallback:', err);
       try {
         const fallbackCode = generateRoomCode();
         const fallbackRoom = await createOnlineRoom(selectedMode, userProfile, fallbackCode);
         setWaitingRoom(fallbackRoom);
       } catch (fallbackErr: unknown) {
-        setErrorMessage(
-          fallbackErr instanceof Error ? fallbackErr.message : 'Could not create battle room'
-        );
+        setErrorFeedback({
+          type: 'general',
+          title: 'Unable to Create Room',
+          message:
+            fallbackErr instanceof Error
+              ? fallbackErr.message
+              : 'Could not establish connection to the multiplayer game server.',
+          actionHint: 'Check your internet connection and try again.',
+        });
       }
     } finally {
       setIsLoading(false);
@@ -96,22 +113,87 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
   };
 
   const handleJoinByCode = async (codeToJoin?: string) => {
-    const code = (codeToJoin || joinCode).trim().toUpperCase();
-    if (!code) {
-      setErrorMessage('Please enter a 6-character room code');
+    const rawCode = codeToJoin || joinCode;
+    const clean = rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+    // Validate Code Format
+    if (!clean) {
+      setErrorFeedback({
+        type: 'invalid-code',
+        title: 'Room Code Required',
+        message: 'Please enter a battle room code to join.',
+        actionHint: 'Ask your friend or host for their 6-character room code.',
+      });
+      return;
+    }
+
+    if (clean.length < 4 || clean.length > 10) {
+      setErrorFeedback({
+        type: 'invalid-code',
+        title: 'Invalid Code Length',
+        message: `The entered code "${clean}" has ${clean.length} characters. Battle room codes are 4 to 8 characters long.`,
+        codeAttempted: clean,
+        actionHint: 'Check for typos and enter the exact room code (e.g. APEX99).',
+      });
       return;
     }
 
     setIsLoading(true);
-    setErrorMessage(null);
+    setJoiningRoomId(clean);
+    setErrorFeedback(null);
+
     try {
       sound.playClick();
-      const room = await joinOnlineRoom(code, userProfile);
+      const room = await joinOnlineRoom(clean, userProfile);
       onRoomJoined(room, false);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to join match');
+      const msg = err instanceof Error ? err.message : String(err);
+
+      if (msg.includes('not found') || msg.includes('Verify')) {
+        setErrorFeedback({
+          type: 'not-found',
+          title: 'Match Room Not Found',
+          message: `No active battle room was found with code "${clean}".`,
+          codeAttempted: clean,
+          actionHint:
+            'Verify that the host has already created the room and is waiting in the lobby.',
+        });
+      } else if (msg.includes('no longer active') || msg.includes('ended') || msg.includes('concluded')) {
+        setErrorFeedback({
+          type: 'inactive',
+          title: 'Match No Longer Active',
+          message: `Room "${clean}" is no longer active. This game may have already ended or expired.`,
+          codeAttempted: clean,
+          actionHint:
+            'Ask the host to create a fresh room, or click "Host New Room" to invite them instead.',
+        });
+      } else if (msg.includes('already full') || msg.includes('2 players')) {
+        setErrorFeedback({
+          type: 'full',
+          title: 'Room Is Already Full',
+          message: `Room "${clean}" already has two players engaged in battle.`,
+          codeAttempted: clean,
+          actionHint: 'Pick an open arena from the list below or create your own room.',
+        });
+      } else if (msg.includes('Network') || msg.includes('connection')) {
+        setErrorFeedback({
+          type: 'network',
+          title: 'Connection Error',
+          message: 'Unable to reach the game server to join this match.',
+          actionHint: 'Please check your network connection and retry.',
+        });
+      } else {
+        setErrorFeedback({
+          type: 'general',
+          title: 'Could Not Join Match',
+          message: msg,
+          codeAttempted: clean,
+          actionHint: 'Try re-entering the code or host a new room.',
+        });
+      }
     } finally {
       setIsLoading(false);
+      setJoiningRoomId(null);
     }
   };
 
@@ -121,6 +203,12 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     setCopiedCode(true);
     sound.playClick();
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleManualRefresh = () => {
+    setIsRefreshingRooms(true);
+    sound.playClick();
+    setTimeout(() => setIsRefreshingRooms(false), 600);
   };
 
   const activeAvatar =
@@ -149,24 +237,25 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                 </h2>
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                  Live Cloud
+                  Live Sync
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Battle real opponents across devices in real time
+                Cross-device matchmaking with real-time turns & live chat
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Close Online Lobby"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Gamer Profile Ribbon */}
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 mb-5">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 mb-4">
           <div className="flex items-center gap-2.5">
             <div
               className={`w-9 h-9 rounded-xl bg-gradient-to-br ${activeAvatar.gradient} flex items-center justify-center text-lg shadow-sm border border-white/20`}
@@ -195,6 +284,52 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
           </button>
         </div>
 
+        {/* Detailed Error Feedback Card if Joining Fails */}
+        {errorFeedback && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/80 text-rose-900 dark:text-rose-200 animate-in fade-in duration-150">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 p-1.5 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 shrink-0">
+                {errorFeedback.type === 'not-found' ? (
+                  <SearchX className="w-4 h-4" />
+                ) : errorFeedback.type === 'inactive' ? (
+                  <Clock className="w-4 h-4" />
+                ) : errorFeedback.type === 'full' ? (
+                  <Users className="w-4 h-4" />
+                ) : errorFeedback.type === 'network' ? (
+                  <WifiOff className="w-4 h-4" />
+                ) : errorFeedback.type === 'invalid-code' ? (
+                  <AlertCircle className="w-4 h-4" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-rose-800 dark:text-rose-300">
+                    {errorFeedback.title}
+                  </h4>
+                  <button
+                    onClick={() => setErrorFeedback(null)}
+                    className="text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 transition-colors p-0.5 cursor-pointer"
+                    aria-label="Dismiss Error"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-[11px] text-rose-700 dark:text-rose-300/90 mt-0.5 leading-relaxed">
+                  {errorFeedback.message}
+                </p>
+                {errorFeedback.actionHint && (
+                  <p className="text-[10px] text-rose-600 dark:text-rose-400/80 font-medium mt-1.5 flex items-center gap-1">
+                    <span>💡 Tip:</span>
+                    <span>{errorFeedback.actionHint}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Waiting Room Overlay if Host created room */}
         {waitingRoom ? (
           <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-cyan-500/40 text-center text-white relative overflow-hidden animate-in zoom-in-95 duration-200">
@@ -207,7 +342,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
               Waiting for Challenger...
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Share this 6-character battle code with a friend to begin:
+              Share this battle code with a friend on any phone or computer:
             </p>
 
             {/* Room Code Badge */}
@@ -225,13 +360,13 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
             </div>
 
             <div className="text-[11px] text-slate-400">
-              Game Mode: <strong className="text-white uppercase">{waitingRoom.mode}</strong>
+              Match Mode: <strong className="text-white uppercase">{waitingRoom.mode}</strong>
             </div>
 
             {/* Instant Challenger Test Button for Solo Testing */}
             <div className="mt-4 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-xs text-slate-300 flex flex-col sm:flex-row items-center justify-between gap-2.5">
               <span className="text-[11px] text-slate-400 text-center sm:text-left">
-                Testing multiplayer without a 2nd device right now?
+                Want to test multiplayer gameplay right now without a second device?
               </span>
               <button
                 type="button"
@@ -269,15 +404,15 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {/* Create Room & Join by Code in 2 columns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               {/* Option 1: Create Room */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center gap-1.5 mb-2 font-display text-sm font-bold text-slate-900 dark:text-white">
                     <Plus className="w-4 h-4 text-cyan-500" />
-                    <span>Create Battle Room</span>
+                    <span>Host New Room</span>
                   </div>
 
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold mb-1.5">
@@ -313,103 +448,168 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                 <button
                   onClick={handleCreateRoom}
                   disabled={isLoading}
-                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-slate-950 bg-cyan-400 hover:bg-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-slate-950 bg-cyan-400 hover:bg-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                 >
-                  <Plus className="w-4 h-4 text-slate-950" />
-                  <span>Host New Room</span>
+                  {isLoading && !joiningRoomId ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Creating Room...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 text-slate-950" />
+                      <span>Host Room</span>
+                    </>
+                  )}
                 </button>
               </div>
 
               {/* Option 2: Join via Room Code */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center gap-1.5 mb-2 font-display text-sm font-bold text-slate-900 dark:text-white">
                     <Users className="w-4 h-4 text-rose-500" />
                     <span>Join with Code</span>
                   </div>
 
-                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold mb-1.5">
-                    Enter 6-digit Code:
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={8}
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                    placeholder="e.g. APEX99"
-                    className="w-full px-3 py-2 text-base font-mono font-bold tracking-widest uppercase bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-900 dark:text-white mb-3"
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                      Enter Room Code:
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {joinCode.length}/8
+                    </span>
+                  </div>
+
+                  <div className="relative mb-3">
+                    <input
+                      type="text"
+                      maxLength={8}
+                      value={joinCode}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        setJoinCode(val);
+                        if (errorFeedback) setErrorFeedback(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && joinCode.trim() && !isLoading) {
+                          handleJoinByCode();
+                        }
+                      }}
+                      placeholder="e.g. APEX99"
+                      className={`w-full px-3 py-2 text-base font-mono font-bold tracking-widest uppercase bg-white dark:bg-slate-800 border rounded-xl focus:outline-none transition-all text-slate-900 dark:text-white ${
+                        errorFeedback && errorFeedback.type === 'invalid-code'
+                          ? 'border-rose-500 focus:ring-2 focus:ring-rose-500/50'
+                          : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-rose-500'
+                      }`}
+                    />
+                    {joinCode && (
+                      <button
+                        onClick={() => {
+                          setJoinCode('');
+                          setErrorFeedback(null);
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <button
                   onClick={() => handleJoinByCode()}
                   disabled={isLoading || !joinCode.trim()}
-                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-rose-500 hover:bg-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.4)] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-rose-500 hover:bg-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.4)] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
                 >
-                  <span>Enter Match</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isLoading && joiningRoomId === joinCode.trim().toUpperCase() ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Connecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Enter Match</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
 
-            {/* Error Message if any */}
-            {errorMessage && (
-              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold text-center">
-                {errorMessage}
-              </div>
-            )}
-
             {/* Public Live Rooms Section */}
-            <div>
+            <div className="pt-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <Radio className="w-3.5 h-3.5 text-cyan-500 animate-pulse" />
                   <span>Open Arenas Waiting for Challenger</span>
                 </span>
-                <span className="text-[10px] text-slate-400">
-                  {openRooms.length} available
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400">
+                    {openRooms.length} available
+                  </span>
+                  <button
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshingRooms}
+                    className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                    title="Refresh open matches"
+                  >
+                    <RefreshCw
+                      className={`w-3 h-3 ${isRefreshingRooms ? 'animate-spin text-cyan-500' : ''}`}
+                    />
+                  </button>
+                </div>
               </div>
 
               {openRooms.length === 0 ? (
-                <div className="py-6 px-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 text-center">
+                <div className="py-5 px-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 text-center">
                   <p className="text-xs text-slate-400 mb-1">
                     No open matches waiting right now.
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Click <strong>Host New Room</strong> above to create a game and invite a friend!
+                    Click <strong>Host Room</strong> above to create a game and invite a friend!
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {openRooms.map((room) => (
-                    <div
-                      key={room.id}
-                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-2 hover:border-cyan-500/50 transition-colors"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                            {room.hostName}
-                          </span>
-                          <span className="px-1.5 py-0.2 rounded bg-cyan-500/15 border border-cyan-500/30 text-[9px] font-mono font-bold text-cyan-500">
-                            {room.mode}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          Code: {room.id}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleJoinByCode(room.id)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all shrink-0 cursor-pointer shadow-sm active:scale-95"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                  {openRooms.map((room) => {
+                    const isConnecting = joiningRoomId === room.id;
+                    return (
+                      <div
+                        key={room.id}
+                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-2 hover:border-cyan-500/50 transition-colors"
                       >
-                        Join
-                      </button>
-                    </div>
-                  ))}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              {room.hostName}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded bg-cyan-500/15 border border-cyan-500/30 text-[9px] font-mono font-bold text-cyan-500 uppercase">
+                              {room.mode}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            Code: <strong className="text-slate-300">{room.id}</strong>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleJoinByCode(room.id)}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all shrink-0 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Joining</span>
+                            </>
+                          ) : (
+                            <span>Join</span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -419,3 +619,4 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     </div>
   );
 };
+

@@ -454,14 +454,6 @@ export default function App() {
           sound.playClick();
           setMode(newMode);
         }}
-        onOpenSettings={() => {
-          sound.playClick();
-          setIsSettingsOpen(true);
-        }}
-        onOpenPaletteStudio={() => {
-          sound.playClick();
-          setIsPaletteStudioOpen(true);
-        }}
         onOpenOnline={() => {
           sound.playClick();
           setIsOnlineLobbyOpen(true);

@@ -317,6 +317,35 @@ export function generateRoomCode(): string {
   return result;
 }
 
+// Server API Helper for resilient multi-device sync
+async function apiCall<T>(
+  url: string,
+  method = 'GET',
+  body?: unknown
+): Promise<{ data: T | null; error?: string; status?: number }> {
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      let errText = '';
+      try {
+        const json = await res.json();
+        errText = json.error || '';
+      } catch {
+        // ignore
+      }
+      return { data: null, error: errText || `Server returned ${res.status}`, status: res.status };
+    }
+    const data = (await res.json()) as T;
+    return { data, status: res.status };
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : 'Network connection error' };
+  }
+}
+
 // Room operations
 export async function createOnlineRoom(
   mode: GameMode,
@@ -354,10 +383,17 @@ export async function createOnlineRoom(
     updatedAt: new Date().toISOString(),
   };
 
-  // Immediately store in local relay registry for zero-delay host setup
+  // 1. Immediately store in local relay registry for zero-delay host setup
   broadcastRoomUpdate(newRoom);
 
-  // Sync to Firestore with timeout fallback
+  // 2. Register room on full-stack server so any player across devices can find it
+  try {
+    await apiCall<{ room: OnlineRoom }>('/api/rooms', 'POST', newRoom);
+  } catch (err) {
+    console.warn('Server room registration notice:', err);
+  }
+
+  // 3. Sync to Firestore concurrently with fallback
   try {
     const firestorePromise = setDoc(doc(db, 'rooms', roomId), newRoom);
     const timeoutPromise = new Promise((_, reject) =>
@@ -365,7 +401,7 @@ export async function createOnlineRoom(
     );
     await Promise.race([firestorePromise, timeoutPromise]);
   } catch (error) {
-    console.warn('Firestore room sync fallback to relay channel:', error);
+    console.warn('Firestore room sync notice (server & relay active):', error);
   }
 
   return newRoom;
@@ -377,36 +413,72 @@ export async function joinOnlineRoom(
 ): Promise<OnlineRoom> {
   const cleanId = roomId.trim().toUpperCase();
   let roomData: OnlineRoom | null = null;
+  let explicitServerError: string | null = null;
 
-  // Try fetching from Firestore with timeout
+  // 1. First try joining via full-stack server API (instant & universal across all devices)
   try {
-    const roomRef = doc(db, 'rooms', cleanId);
-    const snapPromise = getDoc(roomRef);
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
-    const snap = await Promise.race([snapPromise, timeoutPromise]);
-    if (snap && snap.exists()) {
-      roomData = snap.data() as OnlineRoom;
+    const apiRes = await apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}/join`, 'POST', {
+      guestProfile,
+    });
+    if (apiRes.data && apiRes.data.room) {
+      roomData = apiRes.data.room;
+    } else if (apiRes.error && apiRes.status !== 404) {
+      // 409 (full) or 410 (inactive) should be honored immediately
+      explicitServerError = apiRes.error;
     }
-  } catch (err) {
-    console.warn('Firestore get room failed, checking relay:', err);
+  } catch {
+    // continue to fallbacks
   }
 
-  // Fallback to local / relay storage
+  if (explicitServerError) {
+    throw new Error(explicitServerError);
+  }
+
+  // 2. If server join didn't return, check GET /api/rooms/:id
+  if (!roomData) {
+    const getRes = await apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}`);
+    if (getRes.data && getRes.data.room) {
+      roomData = getRes.data.room;
+    }
+  }
+
+  // 3. Fallback to Firestore
+  if (!roomData) {
+    try {
+      const roomRef = doc(db, 'rooms', cleanId);
+      const snapPromise = getDoc(roomRef);
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+      const snap = await Promise.race([snapPromise, timeoutPromise]);
+      if (snap && snap.exists()) {
+        roomData = snap.data() as OnlineRoom;
+      }
+    } catch (err) {
+      console.warn('Firestore get room failed, checking relay:', err);
+    }
+  }
+
+  // 4. Fallback to local / relay storage
   if (!roomData) {
     roomData = getLocalRoom(cleanId);
   }
 
   if (!roomData) {
-    throw new Error(`Match room "${cleanId}" not found. Verify the code.`);
+    throw new Error(`Match room "${cleanId}" not found. Verify the room code and try again.`);
   }
 
-  // Check if host is returning
+  // Check if host is returning to their own room
   if (roomData.hostId === guestProfile.uid) {
     return roomData;
   }
 
+  // Check if room is no longer active
+  if (roomData.status === 'completed' || roomData.status === 'abandoned') {
+    throw new Error(`Match room "${cleanId}" is no longer active. This battle has already ended.`);
+  }
+
+  // Check if room is already full
   if (roomData.guestId && roomData.guestId !== guestProfile.uid) {
-    throw new Error(`Match room "${cleanId}" is already full.`);
+    throw new Error(`Match room "${cleanId}" is already full with 2 players.`);
   }
 
   const updatedRoom: OnlineRoom = {
@@ -419,7 +491,11 @@ export async function joinOnlineRoom(
     updatedAt: new Date().toISOString(),
   };
 
+  // Broadcast to local tabs
   broadcastRoomUpdate(updatedRoom);
+
+  // Sync to server API
+  apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}/join`, 'POST', { guestProfile }).catch(() => {});
 
   // Update in Firestore asynchronously
   try {
@@ -433,7 +509,7 @@ export async function joinOnlineRoom(
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
-    console.warn('Firestore updateDoc failed, relay active:', err);
+    console.warn('Firestore updateDoc notice (relay active):', err);
   }
 
   return updatedRoom;
@@ -465,6 +541,17 @@ export async function submitOnlineMove(
   } as OnlineRoom;
 
   broadcastRoomUpdate(updatedRoom);
+
+  // Push move to server API
+  apiCall(`/api/rooms/${roomId}/move`, 'POST', {
+    nextBoard,
+    nextTurn,
+    lastIndex,
+    nextXPieces,
+    nextOPieces,
+    winner,
+    winningLine,
+  }).catch(() => {});
 
   try {
     const roomRef = doc(db, 'rooms', roomId);
@@ -504,6 +591,13 @@ export async function sendOnlineEmote(
     };
     broadcastRoomUpdate(updatedRoom);
   }
+
+  // Push to server API
+  apiCall(`/api/rooms/${roomId}/emote`, 'POST', {
+    senderId,
+    senderName,
+    emoji,
+  }).catch(() => {});
 
   try {
     await updateDoc(doc(db, 'rooms', roomId), {
@@ -552,6 +646,14 @@ export async function sendRoomChatMessage(
     broadcastRoomUpdate(updatedRoom);
   }
 
+  // Push to server API
+  apiCall(`/api/rooms/${roomId}/chat`, 'POST', {
+    senderId,
+    senderName,
+    senderAvatar,
+    text: trimmed,
+  }).catch(() => {});
+
   try {
     const roomRef = doc(db, 'rooms', roomId);
     await updateDoc(roomRef, {
@@ -596,6 +698,12 @@ export async function requestOnlineRematch(
     broadcastRoomUpdate(updatedRoom);
   }
 
+  // Push rematch to server API
+  apiCall(`/api/rooms/${roomId}/rematch`, 'POST', {
+    requesterId,
+    cellCount,
+  }).catch(() => {});
+
   try {
     const roomRef = doc(db, 'rooms', roomId);
     if (updatedRoom) {
@@ -633,6 +741,32 @@ export function subscribeToOnlineRoom(
     onUpdate(initialLocal);
   }
 
+  // 1. Server-Sent Events (SSE) stream for instant real-time push
+  let eventSource: EventSource | null = null;
+  try {
+    if (typeof window !== 'undefined' && 'EventSource' in window) {
+      eventSource = new EventSource(`/api/rooms/${roomId}/events`);
+      eventSource.onmessage = (event) => {
+        if (isUnsubscribed) return;
+        try {
+          const room = JSON.parse(event.data) as OnlineRoom;
+          if (room && room.id === roomId) {
+            broadcastRoomUpdate(room);
+            onUpdate(room);
+          }
+        } catch {
+          // ignore heartbeat / invalid json
+        }
+      };
+      eventSource.onerror = () => {
+        // SSE reconnects automatically
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. BroadcastChannel relay
   const handleRelay = (e: MessageEvent) => {
     if (isUnsubscribed) return;
     if (e.data?.type === 'ROOM_UPDATE' && e.data?.room?.id === roomId) {
@@ -641,6 +775,7 @@ export function subscribeToOnlineRoom(
   };
   relayChannel?.addEventListener('message', handleRelay);
 
+  // 3. LocalStorage sync
   const handleStorage = (e: StorageEvent) => {
     if (isUnsubscribed) return;
     if (e.key === `apex_room_${roomId}` && e.newValue) {
@@ -654,6 +789,7 @@ export function subscribeToOnlineRoom(
   };
   window.addEventListener('storage', handleStorage);
 
+  // 4. Firestore onSnapshot
   let unsubFirestore: (() => void) | undefined;
   try {
     unsubFirestore = onSnapshot(
@@ -677,6 +813,9 @@ export function subscribeToOnlineRoom(
 
   return () => {
     isUnsubscribed = true;
+    if (eventSource) {
+      eventSource.close();
+    }
     relayChannel?.removeEventListener('message', handleRelay);
     window.removeEventListener('storage', handleStorage);
     if (unsubFirestore) unsubFirestore();
@@ -701,16 +840,28 @@ export function subscribeToOpenRooms(
     onUpdate(Array.from(map.values()));
   };
 
-  refreshOpenRooms([]);
+  // 1. Fetch from server API immediately and on intervals
+  const fetchServerRooms = async () => {
+    if (isUnsubscribed) return;
+    const res = await apiCall<{ rooms: OnlineRoom[] }>('/api/rooms');
+    if (res.data && res.data.rooms) {
+      refreshOpenRooms(res.data.rooms);
+    }
+  };
 
+  fetchServerRooms();
+  const pollTimer = setInterval(fetchServerRooms, 3000);
+
+  // 2. BroadcastChannel
   const handleRelay = (e: MessageEvent) => {
     if (isUnsubscribed) return;
     if (e.data?.type === 'ROOM_UPDATE') {
-      refreshOpenRooms();
+      fetchServerRooms();
     }
   };
   relayChannel?.addEventListener('message', handleRelay);
 
+  // 3. LocalStorage
   const handleStorage = (e: StorageEvent) => {
     if (isUnsubscribed) return;
     if (e.key === 'apex_local_open_rooms') {
@@ -719,6 +870,7 @@ export function subscribeToOpenRooms(
   };
   window.addEventListener('storage', handleStorage);
 
+  // 4. Firestore query
   let unsubFirestore: (() => void) | undefined;
   try {
     const q = query(
@@ -745,6 +897,7 @@ export function subscribeToOpenRooms(
 
   return () => {
     isUnsubscribed = true;
+    clearInterval(pollTimer);
     relayChannel?.removeEventListener('message', handleRelay);
     window.removeEventListener('storage', handleStorage);
     if (unsubFirestore) unsubFirestore();

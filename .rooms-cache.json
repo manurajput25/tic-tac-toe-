@@ -1,0 +1,23 @@
+[
+  {
+    "id": "VEASSG",
+    "mode": "classic3x3",
+    "status": "waiting",
+    "hostId": "player_host",
+    "hostName": "Apex Host",
+    "hostMark": "X",
+    "board": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "createdAt": "2026-10-05T08:00:00Z",
+    "updatedAt": "2026-10-05T08:20:16.838Z"
+  }
+]
