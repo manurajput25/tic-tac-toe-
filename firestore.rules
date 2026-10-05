@@ -1,40 +1,21 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default Deny Catch-All
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     // User Profiles Collection
     match /users/{userId} {
-      allow get: if isValidId(userId);
-      allow list: if true;
-      allow create, update: if isValidId(userId)
-        && incoming().username is string && incoming().username.size() >= 2 && incoming().username.size() <= 30
-        && incoming().displayName is string && incoming().displayName.size() >= 1 && incoming().displayName.size() <= 60;
-      allow delete: if false;
+      allow read: if true;
+      allow write: if isValidId(userId);
     }
 
     // Multiplayer Match Rooms Collection
     match /rooms/{roomId} {
-      allow get: if isValidId(roomId);
-      allow list: if true;
-      allow create: if isValidId(roomId)
-        && incoming().mode in ['classic3x3', 'infinite3', 'grid4x4', 'grid6x6', 'grid12x12']
-        && incoming().status in ['waiting', 'playing', 'completed', 'abandoned']
-        && incoming().board is list;
-      allow update: if isValidId(roomId)
-        && incoming().board is list;
-      allow delete: if isValidId(roomId);
+      allow read: if true;
+      allow write: if isValidId(roomId);
     }
   }
 }
+

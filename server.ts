@@ -154,9 +154,24 @@ async function startServer() {
       return res.status(404).json({ error: `Room ${roomId} not found` });
     }
 
-    // If host is returning
-    if (room.hostId === guestProfile.uid) {
+    // If host is returning to an already started match
+    if (room.hostId === guestProfile.uid && room.status === 'playing') {
       return res.json({ room });
+    }
+
+    // If host is joining their own waiting room (e.g. testing in 2nd tab or solo duel)
+    if (room.hostId === guestProfile.uid && room.status === 'waiting') {
+      const challengerId = `${guestProfile.uid}_challenger_${Date.now()}`;
+      room.guestId = challengerId;
+      room.guestName = `${guestProfile.displayName} (Challenger)`;
+      room.guestAvatar = guestProfile.avatar === 'cyber-ninja' ? 'solar-phoenix' : 'cyber-ninja';
+      room.guestMark = 'O';
+      room.status = 'playing';
+      room.updatedAt = new Date().toISOString();
+
+      rooms.set(roomId, room);
+      broadcastRoom(room);
+      return res.json({ room, isChallenger: true });
     }
 
     // If room is already concluded or abandoned
@@ -179,6 +194,70 @@ async function startServer() {
     rooms.set(roomId, room);
     broadcastRoom(room);
     res.json({ room });
+  });
+
+  // API Routes: Quick Match / Auto Matchmaking
+  app.post('/api/rooms/quickmatch', (req: Request, res: Response) => {
+    const { playerProfile, mode } = req.body;
+    if (!playerProfile || !playerProfile.uid) {
+      return res.status(400).json({ error: 'Player profile required' });
+    }
+
+    const selectedMode = mode || 'classic3x3';
+
+    // 1. Look for existing open room
+    for (const room of rooms.values()) {
+      if (room.status === 'waiting' && room.mode === selectedMode && room.hostId !== playerProfile.uid) {
+        room.guestId = playerProfile.uid;
+        room.guestName = playerProfile.displayName;
+        room.guestAvatar = playerProfile.avatar;
+        room.guestMark = 'O';
+        room.status = 'playing';
+        room.updatedAt = new Date().toISOString();
+        rooms.set(room.id, room);
+        broadcastRoom(room);
+        return res.json({ room, isHost: false });
+      }
+    }
+
+    // 2. Otherwise create a new waiting room
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let newId = '';
+    for (let i = 0; i < 6; i++) {
+      newId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    const cellCount =
+      selectedMode === 'grid12x12' ? 144 : selectedMode === 'grid6x6' ? 36 : selectedMode === 'grid4x4' ? 16 : 9;
+
+    const newRoom: OnlineRoom = {
+      id: newId,
+      mode: selectedMode,
+      status: 'waiting',
+      hostId: playerProfile.uid,
+      hostName: playerProfile.displayName,
+      hostAvatar: playerProfile.avatar,
+      hostMark: 'X',
+      guestId: null,
+      guestName: null,
+      guestAvatar: null,
+      guestMark: 'O',
+      currentTurn: 'X',
+      board: Array(cellCount).fill(null),
+      xPieceIndices: [],
+      oPieceIndices: [],
+      winner: null,
+      winningLine: null,
+      lastMoveIndex: null,
+      messages: [],
+      rematchRequestedBy: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    rooms.set(newId, newRoom);
+    broadcastRoom(newRoom);
+    res.json({ room: newRoom, isHost: true });
   });
 
   // API Routes: Submit a move

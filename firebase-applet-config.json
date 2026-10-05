@@ -1,12 +1,12 @@
 {
-  "projectId": "apt-deployment-494007-d6",
-  "appId": "1:296266266026:web:6786aa1ba32590d5d1a7d3",
-  "apiKey": "AIzaSyDcHSID1VmxaKvtxc1w-cTQFrD4cfXDbs0",
-  "authDomain": "apt-deployment-494007-d6.firebaseapp.com",
+  "projectId": "tic-tac-toe-eb182",
+  "appId": "1:716395744560:web:af56c4b8205430555d8cf5",
+  "apiKey": "AIzaSyBoOekUJ10kRTj5r9SSsXevlKaQJBOL55w",
+  "authDomain": "tic-tac-toe-eb182.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-apextictactoe-22c3b972-9d37-432c-8e68-7c8c5c8e7ecf",
-  "storageBucket": "apt-deployment-494007-d6.firebasestorage.app",
-  "messagingSenderId": "296266266026",
+  "storageBucket": "tic-tac-toe-eb182.firebasestorage.app",
+  "messagingSenderId": "716395744560",
   "measurementId": "",
-  "oAuthClientId": "296266266026-6bf74623vrlqgaa17907gjs0ijvcsl27.apps.googleusercontent.com",
+  "oAuthClientId": "716395744560-nmlt5tc00fe1v1h7iumd8c9eq2qkoupm.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

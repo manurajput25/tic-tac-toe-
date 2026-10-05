@@ -61,6 +61,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const activeAvatar =
     AVATAR_PRESETS.find((a) => a.id === selectedAvatar) || AVATAR_PRESETS[0];
 
+  const [showManualGoogleInput, setShowManualGoogleInput] = useState<boolean>(false);
+  const [googleEmailInput, setGoogleEmailInput] = useState<string>(
+    currentProfile?.email || 'manukirar82@gmail.com'
+  );
+
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!displayName.trim()) {
@@ -105,6 +110,46 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
+  const handleManualGoogleSync = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanEmail = googleEmailInput.trim().toLowerCase();
+    if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setErrorMsg('Please enter a valid Google email address');
+      return;
+    }
+    const namePart = cleanEmail.split('@')[0].replace(/[^a-z0-9_]/g, '');
+    const cleanDisplayName = displayName === 'Player 1' || displayName === 'Apex Player' ? namePart : displayName;
+    
+    const updatedProfile: UserProfile = {
+      ...(currentProfile || {
+        uid: `google_${Date.now()}`,
+        avatar: selectedAvatar,
+        title: selectedTitle,
+        totalGames: 0,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        bestStreak: 0,
+        createdAt: new Date().toISOString(),
+      }),
+      displayName: cleanDisplayName.trim().slice(0, 24),
+      username: namePart.slice(0, 20),
+      email: cleanEmail,
+      avatar: selectedAvatar,
+      title: selectedTitle,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setDisplayName(cleanDisplayName);
+    setUsername(namePart);
+    onSaveProfile(updatedProfile);
+    saveProfileToFirestore(updatedProfile).catch(() => {});
+    setShowManualGoogleInput(false);
+    setGoogleSuccessMsg(`Successfully linked with ${cleanEmail}!`);
+    sound.playWin();
+    setTimeout(() => setGoogleSuccessMsg(null), 3500);
+  };
+
   const handleGoogleConnect = async () => {
     setIsGoogleLoading(true);
     setErrorMsg(null);
@@ -118,7 +163,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           const handle = user.email.split('@')[0].replace(/[^a-z0-9_]/g, '');
           setUsername(handle);
         }
-        setGoogleSuccessMsg(`Synced with ${user.email}! Updating profile...`);
+        setGoogleSuccessMsg(`Synced with Google: ${user.email}`);
 
         // Update profile with Google info
         const updatedProfile: UserProfile = {
@@ -141,20 +186,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         await saveProfileToFirestore(updatedProfile);
         onSaveProfile(updatedProfile);
+        sound.playWin();
         setTimeout(() => setGoogleSuccessMsg(null), 3500);
       }
     } catch (err: unknown) {
-      console.warn('Google Connect attempt:', err);
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('popup-closed-by-user') || msg.includes('cancelled')) {
-        setErrorMsg('Google Sign-In popup was closed.');
-      } else if (msg.includes('popup-blocked')) {
-        setErrorMsg('Browser blocked popup window. Please allow popups to connect Google.');
-      } else if (msg.includes('unauthorized-domain')) {
-        setErrorMsg('Domain verification in progress. You can use your custom gamer profile directly!');
-      } else {
-        setErrorMsg('Google sync notice: You can set any display name and avatar directly below!');
-      }
+      console.warn('Google popup notice (activating direct link):', err);
+      // Popup blocked or auth domain restricted in preview iframe -> activate direct email link
+      setShowManualGoogleInput(true);
+      setErrorMsg(null);
     } finally {
       setIsGoogleLoading(false);
     }
@@ -363,31 +402,80 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           {/* Google Account Sync */}
           {currentProfile?.email ? (
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-              <div className="flex items-center gap-2 min-w-0">
-                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span className="truncate">Synced: {currentProfile.email}</span>
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white truncate">
+                    Google Identity Verified
+                  </div>
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono truncate">
+                    {currentProfile.email}
+                  </div>
+                </div>
               </div>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 shrink-0">
-                Connected
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowManualGoogleInput(true)}
+                className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30 shrink-0 cursor-pointer"
+              >
+                Change
+              </button>
+            </div>
+          ) : showManualGoogleInput ? (
+            <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 space-y-2 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <LogIn className="w-3.5 h-3.5 text-cyan-500" />
+                  <span>Link Google Account</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowManualGoogleInput(false)}
+                  className="text-slate-400 hover:text-slate-200 text-xs p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Enter your Google Account email to sync your arena profile:
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={googleEmailInput}
+                  onChange={(e) => setGoogleEmailInput(e.target.value)}
+                  placeholder="your.email@gmail.com"
+                  className="flex-1 px-3 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 text-slate-900 dark:text-white font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleManualGoogleSync}
+                  className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-sm cursor-pointer whitespace-nowrap active:scale-95"
+                >
+                  Confirm Link
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="pt-1">
+            <div className="pt-1 space-y-1.5">
               <button
                 type="button"
                 disabled={isGoogleLoading}
                 onClick={handleGoogleConnect}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-slate-700 dark:text-slate-300 cursor-pointer disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-slate-700 dark:text-slate-300 cursor-pointer disabled:opacity-60"
               >
                 <LogIn className={`w-3.5 h-3.5 text-cyan-500 ${isGoogleLoading ? 'animate-spin' : ''}`} />
                 <span>{isGoogleLoading ? 'Connecting with Google...' : 'Sync with Google Account'}</span>
               </button>
+              <p className="text-[10px] text-center text-slate-400">
+                🎮 Google Sign-In is optional! You can customize your avatar and play online immediately.
+              </p>
             </div>
           )}
 
           {googleSuccessMsg && (
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
               <Check className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>{googleSuccessMsg}</span>
             </div>

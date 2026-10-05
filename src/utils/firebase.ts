@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 import {
   getAuth,
   signInAnonymously,
@@ -24,10 +25,24 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { UserProfile, OnlineRoom, Player, GameMode, WinningLine, CustomPalette } from '../types/game';
 
-// Initialize Firebase App & Firestore
+// Initialize Firebase App & Services
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db =
+  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
 export const auth = getAuth(app);
+
+export let analytics: ReturnType<typeof getAnalytics> | null = null;
+if (typeof window !== 'undefined') {
+  isSupported()
+    .then((supported) => {
+      if (supported) {
+        analytics = getAnalytics(app);
+      }
+    })
+    .catch(() => {});
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -466,9 +481,28 @@ export async function joinOnlineRoom(
     throw new Error(`Match room "${cleanId}" not found. Verify the room code and try again.`);
   }
 
-  // Check if host is returning to their own room
-  if (roomData.hostId === guestProfile.uid) {
+  // Check if host is returning to an active battle
+  if (roomData.hostId === guestProfile.uid && roomData.status === 'playing') {
     return roomData;
+  }
+
+  // If host joins their own waiting room (e.g. testing in 2nd tab or window)
+  if (roomData.hostId === guestProfile.uid && roomData.status === 'waiting') {
+    const challengerUid = `${guestProfile.uid}_challenger_${Date.now()}`;
+    const updatedRoom: OnlineRoom = {
+      ...roomData,
+      guestId: challengerUid,
+      guestName: `${guestProfile.displayName} (Challenger)`,
+      guestAvatar: guestProfile.avatar === 'cyber-ninja' ? 'solar-phoenix' : 'cyber-ninja',
+      guestMark: 'O',
+      status: 'playing',
+      updatedAt: new Date().toISOString(),
+    };
+    broadcastRoomUpdate(updatedRoom);
+    apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}/join`, 'POST', {
+      guestProfile: { ...guestProfile, uid: challengerUid },
+    }).catch(() => {});
+    return updatedRoom;
   }
 
   // Check if room is no longer active
@@ -902,4 +936,26 @@ export function subscribeToOpenRooms(
     window.removeEventListener('storage', handleStorage);
     if (unsubFirestore) unsubFirestore();
   };
+}
+
+export async function quickMatchOnline(
+  mode: GameMode,
+  playerProfile: UserProfile
+): Promise<{ room: OnlineRoom; isHost: boolean }> {
+  try {
+    const res = await apiCall<{ room: OnlineRoom; isHost: boolean }>('/api/rooms/quickmatch', 'POST', {
+      mode,
+      playerProfile,
+    });
+    if (res.data && res.data.room) {
+      broadcastRoomUpdate(res.data.room);
+      return { room: res.data.room, isHost: res.data.isHost };
+    }
+  } catch (err) {
+    console.warn('Quick match API notice:', err);
+  }
+
+  // Fallback to creating a room
+  const fallback = await createOnlineRoom(mode, playerProfile);
+  return { room: fallback, isHost: true };
 }
