@@ -36,14 +36,16 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     isWin
       ? opponent === 'bot'
         ? isAiWinner
-          ? 'Gemini Claims Victory'
-          : 'You Won!'
+          ? 'You Lose!'
+          : 'You Win!'
         : opponent === 'online'
         ? winner === 'X'
-          ? `${playerXName || 'Host'} Triumphs!`
-          : `${playerOName || 'Challenger'} Triumphs!`
-        : `Player ${winner} Triumphs!`
-      : "It's a Stalemate!";
+          ? `${playerXName || 'Host'} Wins!`
+          : `${playerOName || 'Challenger'} Wins!`
+        : winner === 'X'
+        ? `${playerXName || 'Player X'} Wins!`
+        : `${playerOName || 'Player O'} Wins!`
+      : "It's a Draw!";
 
   const accentColor =
     isWin && winner === 'X'
@@ -93,10 +95,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             {isWin
               ? opponent === 'bot'
                 ? isAiWinner
-                  ? 'Gemini uncovered the decisive sequence. Ready for a rematch?'
-                  : 'Magnificent tactical mastery! You defeated Gemini.'
-                : `Player ${winner} dominated the arena and aligned the win.`
-              : 'Every corridor contested. Perfect defensive equilibrium.'}
+                  ? 'Better luck next time! Ready for a rematch?'
+                  : 'Congratulations! You defeated the Robot.'
+                : opponent === 'online'
+                ? `${winner === 'X' ? playerXName || 'Host' : playerOName || 'Challenger'} aligned the winning marks!`
+                : `${winner === 'X' ? playerXName || 'Player X' : playerOName || 'Player O'} aligned the winning marks!`
+              : 'Every move contested. Match ended in a draw!'}
           </p>
 
           {/* Action buttons */}

@@ -75,17 +75,6 @@ export const RulesModal: React.FC<RulesModalProps> = ({ onClose }) => {
             </p>
           </div>
 
-          {/* Grid 12x12 */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-1.5 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-              12×12 Epic Colosseum (Connect 6)
-            </h4>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Colossal 144-cell Gomoku-scale battlefield! Take turns placing marks. The first player to align <strong>6 consecutive marks (6-pair chain)</strong> in any direction (horizontal, vertical, or diagonal) achieves ultimate victory!
-            </p>
-          </div>
-
           {/* Keyboard Shortcuts */}
           <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
             <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-2 flex items-center gap-2">

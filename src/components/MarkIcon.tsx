@@ -20,7 +20,6 @@ export const MarkIcon: React.FC<MarkIconProps> = ({
   orderNumber,
   markStyle = 'neon-glow',
 }) => {
-  const pixelSize = size === 'lg' ? 76 : size === 'md' ? 48 : size === 'sm' ? 28 : 18;
   const baseStrokeWidth = size === 'lg' ? 9.5 : size === 'md' ? 6.5 : size === 'sm' ? 4 : 2.8;
   const strokeWidth =
     markStyle === 'bold-solid'
@@ -33,14 +32,22 @@ export const MarkIcon: React.FC<MarkIconProps> = ({
   const glow = player === 'X' ? theme.xGlow : theme.oGlow;
   const gradId = `mark-grad-${player}-${theme.id}-${size}-${markStyle}`;
 
+  // Fluid responsive dimensions across device screens
+  const sizeClasses =
+    size === 'lg'
+      ? 'w-11 h-11 xs:w-13 xs:h-13 sm:w-16 sm:h-16 md:w-[74px] md:h-[74px]'
+      : size === 'md'
+      ? 'w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12'
+      : size === 'sm'
+      ? 'w-5 h-5 xs:w-6 xs:h-6 sm:w-7 sm:h-7'
+      : 'w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5';
+
   return (
     <div
-      className={`relative flex items-center justify-center select-none transition-all duration-300 ${
+      className={`relative flex items-center justify-center select-none transition-all duration-300 ${sizeClasses} ${
         isExpiring ? 'opacity-40 animate-fade-warning scale-90' : 'opacity-100 scale-100'
       }`}
       style={{
-        width: pixelSize,
-        height: pixelSize,
         filter: isExpiring
           ? 'drop-shadow(0 0 6px rgba(244, 63, 94, 0.4))'
           : theme.vibe === 'minimalist'

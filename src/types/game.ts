@@ -1,7 +1,7 @@
 export type Player = 'X' | 'O';
 export type CellValue = Player | null;
 
-export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4' | 'grid6x6' | 'grid12x12';
+export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4' | 'grid6x6';
 export type OpponentType = 'bot' | 'pvp' | 'online';
 export type BotDifficulty = 'easy' | 'medium' | 'unbeatable';
 
@@ -64,6 +64,7 @@ export interface UserProfile {
   bestStreak: number;
   customPalettes?: CustomPalette[];
   activePaletteId?: string | null;
+  isVerified?: boolean;
   createdAt: string;
   updatedAt: string;
 }

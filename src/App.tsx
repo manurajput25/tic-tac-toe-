@@ -467,7 +467,7 @@ export default function App() {
       />
 
       {/* Main Game Center */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 sm:py-8 max-w-4xl mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-2.5 sm:px-4 py-2.5 sm:py-6 max-w-4xl mx-auto w-full">
         {/* Active Online Battle HUD Bar */}
         {opponent === 'online' && activeOnlineRoom && (
           <div className="w-full max-w-xl mx-auto mb-4 p-3 bg-white/95 dark:bg-slate-900/95 rounded-2xl border border-cyan-500/40 shadow-lg flex flex-wrap items-center justify-between gap-2.5 backdrop-blur-xl animate-in fade-in">
@@ -643,11 +643,19 @@ export default function App() {
           opponent={opponent}
           theme={currentTheme}
           streakCount={engine.score.currentStreak}
-          playerXName={activeOnlineRoom?.hostName || undefined}
-          playerOName={activeOnlineRoom?.guestName || undefined}
+          playerXName={
+            opponent === 'online'
+              ? activeOnlineRoom?.hostName || 'Host'
+              : 'Player X'
+          }
+          playerOName={
+            opponent === 'online'
+              ? activeOnlineRoom?.guestName || 'Challenger'
+              : 'Player O'
+          }
           onPlayAgain={() => {
             if (opponent === 'online' && activeOnlineRoom) {
-              const cells = mode === 'grid12x12' ? 144 : mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
+              const cells = mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
               requestOnlineRematch(activeOnlineRoom.id, userProfile?.uid || 'anon', cells);
               setIsGameOverModalOpen(false);
             } else {

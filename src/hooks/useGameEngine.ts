@@ -20,7 +20,6 @@ import {
   getBestMoveInfinite,
   getBestMove4x4,
   getBestMove6x6,
-  getBestMove12x12,
   getHintMove,
 } from '../utils/ai';
 
@@ -36,7 +35,7 @@ const defaultScore = (): GameScore => ({
 });
 
 const getCellCount = (m: GameMode): number =>
-  m === 'grid12x12' ? 144 : m === 'grid6x6' ? 36 : m === 'grid4x4' ? 16 : 9;
+  m === 'grid6x6' ? 36 : m === 'grid4x4' ? 16 : 9;
 
 export interface UseGameEngineOptions {
   mode: GameMode;
@@ -404,9 +403,7 @@ export function useGameEngine({
 
     const timer = setTimeout(() => {
       let botMove = -1;
-      if (mode === 'grid12x12') {
-        botMove = getBestMove12x12(board, 'O', botDifficulty);
-      } else if (mode === 'grid6x6') {
+      if (mode === 'grid6x6') {
         botMove = getBestMove6x6(board, 'O', botDifficulty);
       } else if (mode === 'grid4x4') {
         botMove = getBestMove4x4(board, 'O', botDifficulty);

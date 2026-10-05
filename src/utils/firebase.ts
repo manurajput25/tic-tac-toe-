@@ -225,6 +225,108 @@ export async function saveProfileToFirestore(profile: UserProfile): Promise<void
   }
 }
 
+// Check if an email is already registered ("ek email se ek hi account bane")
+export async function checkEmailRegistered(email: string): Promise<boolean> {
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const res = await fetch('/api/auth/check-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    const data = await res.json();
+    return Boolean(data.exists);
+  } catch {
+    return false;
+  }
+}
+
+// Request verification code for first time email registration
+export async function sendEmailVerificationCode(
+  email: string,
+  displayName?: string,
+  username?: string,
+  avatar?: string,
+  password?: string
+): Promise<{ success: boolean; message: string; code?: string; isExistingUser?: boolean }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const res = await fetch('/api/auth/send-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: cleanEmail,
+      displayName,
+      username,
+      avatar,
+      password,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to send verification code');
+  }
+  return data;
+}
+
+// Verify 6-digit code and complete account registration
+export async function verifyAndRegisterEmailAccount(
+  email: string,
+  code: string
+): Promise<{ success: boolean; message: string; profile: UserProfile }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const res = await fetch('/api/auth/verify-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: cleanEmail, code: code.trim() }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Verification failed');
+  }
+
+  // Save profile to Firestore and local cache
+  if (data.profile) {
+    cacheProfile(data.profile);
+    saveProfileToFirestore(data.profile).catch(() => {});
+  }
+  return data;
+}
+
+// Login with email and password
+export async function loginWithEmail(
+  email: string,
+  password?: string
+): Promise<{ success: boolean; message: string; profile: UserProfile }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: cleanEmail, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Login failed');
+  }
+
+  if (data.profile) {
+    cacheProfile(data.profile);
+    saveProfileToFirestore(data.profile).catch(() => {});
+  }
+  return data;
+}
+
+// Logout user and reset to clean guest profile
+export async function logoutUser(): Promise<UserProfile> {
+  try {
+    await auth.signOut();
+  } catch {
+    // ignore
+  }
+  localStorage.removeItem(LOCAL_PROFILE_KEY);
+  const guestProfile = getOrCreateLocalProfile();
+  return guestProfile;
+}
+
 // Custom Palette Profile Operations
 export async function saveCustomPaletteToProfile(
   profile: UserProfile,
@@ -371,7 +473,7 @@ export async function createOnlineRoom(
   const path = `rooms/${roomId}`;
 
   const cellCount =
-    mode === 'grid12x12' ? 144 : mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
+    mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
 
   const newRoom: OnlineRoom = {
     id: roomId,

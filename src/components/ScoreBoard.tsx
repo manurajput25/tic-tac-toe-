@@ -47,35 +47,35 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
   const oDisplayName =
     opponent === 'bot'
-      ? 'Gemini'
+      ? 'Robot'
       : opponent === 'online'
       ? playerOLabel || 'Opponent (O)'
       : 'Player O';
 
   return (
-    <div className="w-full max-w-xl mx-auto mb-6">
+    <div className="w-full max-w-xl mx-auto mb-3 sm:mb-5">
       {/* Upper Meta line: Unboxed metadata with typographic separators */}
-      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-3 px-1.5 tabular-nums">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mb-2 sm:mb-3 px-1 tabular-nums gap-1">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {onlineRoomCode && (
-            <span className="font-mono font-bold text-[10px] px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
-              Room: {onlineRoomCode}
+            <span className="font-mono font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
+              #{onlineRoomCode}
             </span>
           )}
           <span className="font-semibold text-slate-700 dark:text-slate-300">Round {roundNumber}</span>
           <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
           <span>Draws: {score.draws}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <span
-            className={`flex items-center gap-1.5 font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+            className={`flex items-center gap-1 font-bold px-2 sm:px-2.5 py-0.5 rounded-full border transition-all text-[10px] sm:text-xs ${
               score.currentStreak >= 3
                 ? 'bg-gradient-to-r from-amber-500/25 via-orange-500/30 to-rose-500/25 text-amber-600 dark:text-amber-300 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.45)] ring-1 ring-amber-400/80'
                 : 'text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 border-amber-500/20 shadow-sm'
             }`}
           >
             <Flame
-              className={`w-3.5 h-3.5 ${
+              className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${
                 score.currentStreak >= 3
                   ? 'text-orange-500 fill-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)] animate-pulse'
                   : 'text-amber-500 animate-pulse'
@@ -83,16 +83,16 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             />
             <span>Streak {score.currentStreak} {score.currentStreak >= 3 ? '🔥' : ''}</span>
           </span>
-          <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
-          <span className="text-slate-400 dark:text-slate-500">Best {score.bestStreak}</span>
+          <span aria-hidden="true" className="hidden xs:inline text-slate-300 dark:text-slate-600">·</span>
+          <span className="hidden xs:inline text-slate-400 dark:text-slate-500">Best {score.bestStreak}</span>
         </div>
       </div>
 
       {/* Main Player Versus Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 relative">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 relative">
         {/* Player X Card */}
         <div
-          className={`p-2.5 sm:p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
+          className={`p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
             isXTurn
               ? 'bg-white/95 dark:bg-slate-900/90 border-cyan-500/60 shadow-[0_4px_20px_rgba(6,182,212,0.15)] dark:shadow-[0_0_30px_rgba(6,182,212,0.22)] scale-[1.02]'
               : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 opacity-75 hover:opacity-90'
@@ -102,10 +102,10 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
           {/* Top specular reflection */}
           <div className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-slate-300 dark:via-white/15 to-transparent pointer-events-none" />
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
               <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-display font-black text-xl shadow-inner border"
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
                 style={{
                   backgroundColor: `${theme.xColor}18`,
                   color: theme.xColor,
@@ -115,18 +115,18 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               >
                 ✕
               </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide truncate max-w-[100px] sm:max-w-[130px]">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide truncate max-w-[65px] xs:max-w-[95px] sm:max-w-[130px]">
                     {xDisplayName}
                   </span>
-                  <User className="w-3 h-3 text-slate-400 shrink-0" />
+                  <User className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400 shrink-0" />
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                <div className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                   {isXTurn ? (
                     <span className="text-cyan-600 dark:text-cyan-400 font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping inline-block" />
-                      Active Turn
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping inline-block shrink-0" />
+                      <span className="truncate">Turn</span>
                     </span>
                   ) : (
                     'Waiting'
@@ -135,11 +135,11 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               </div>
             </div>
 
-            <div className="text-right">
-              <div className="text-2xl sm:text-3xl font-bold font-display text-slate-900 dark:text-white tabular-nums tracking-tight">
+            <div className="text-right shrink-0">
+              <div className="text-xl sm:text-2xl md:text-3xl font-bold font-display text-slate-900 dark:text-white tabular-nums tracking-tight">
                 {score.playerX}
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-semibold">Wins</div>
+              <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-semibold">Wins</div>
             </div>
           </div>
 
@@ -154,7 +154,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
         {/* Player O Card */}
         <div
-          className={`p-2.5 sm:p-4 rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
+          className={`p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-300 relative overflow-hidden backdrop-blur-xl ${
             isOTurn
               ? 'bg-white/95 dark:bg-slate-900/90 border-rose-500/60 shadow-[0_4px_20px_rgba(244,63,94,0.15)] dark:shadow-[0_0_30px_rgba(244,63,94,0.22)] scale-[1.02]'
               : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/80 opacity-75 hover:opacity-90'
@@ -164,10 +164,10 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
           {/* Top specular reflection */}
           <div className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-slate-300 dark:via-white/15 to-transparent pointer-events-none" />
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
               <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-display font-black text-xl shadow-inner border"
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
                 style={{
                   backgroundColor: `${theme.oColor}18`,
                   color: theme.oColor,
@@ -177,32 +177,32 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               >
                 ◯
               </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide truncate max-w-[100px] sm:max-w-[130px]">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-100 tracking-wide truncate max-w-[65px] xs:max-w-[95px] sm:max-w-[130px]">
                     {oDisplayName}
                   </span>
                   {opponent === 'bot' ? (
-                    <Bot className="w-3 h-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
+                    <Bot className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-cyan-500 dark:text-cyan-400 shrink-0" />
                   ) : (
-                    <User className="w-3 h-3 text-slate-400 shrink-0" />
+                    <User className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400 shrink-0" />
                   )}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                <div className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                   {isOTurn ? (
                     isBotThinking ? (
                       <span className="text-rose-600 dark:text-rose-400 font-semibold animate-pulse flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block" />
-                        Gemini is calculating...
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block shrink-0" />
+                        <span className="truncate">Thinking...</span>
                       </span>
                     ) : (
                       <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block" />
-                        Active Turn
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block shrink-0" />
+                        <span className="truncate">Turn</span>
                       </span>
                     )
                   ) : opponent === 'bot' ? (
-                    `Gemini · ${difficultyLabel}`
+                    `${difficultyLabel}`
                   ) : (
                     'Waiting'
                   )}
@@ -210,11 +210,11 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               </div>
             </div>
 
-            <div className="text-right">
-              <div className="text-2xl sm:text-3xl font-bold font-display text-slate-900 dark:text-white tabular-nums tracking-tight">
+            <div className="text-right shrink-0">
+              <div className="text-xl sm:text-2xl md:text-3xl font-bold font-display text-slate-900 dark:text-white tabular-nums tracking-tight">
                 {score.playerO}
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-semibold">Wins</div>
+              <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-semibold">Wins</div>
             </div>
           </div>
 

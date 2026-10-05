@@ -92,21 +92,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="sm:hidden">6×6</span>
               <span className="hidden sm:inline">6×6 Grid</span>
             </button>
-
-            <button
-              onClick={() => onSelectMode('grid12x12')}
-              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold rounded-xl transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer shrink-0 ${
-                currentMode === 'grid12x12'
-                  ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <span className="sm:hidden">12×12</span>
-              <span className="hidden sm:inline">12×12 Grid</span>
-              <span className="hidden lg:inline px-1 py-0.2 rounded-full bg-amber-500/10 border border-amber-500/30 text-[8px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                6 in Row
-              </span>
-            </button>
           </nav>
         </div>
 
@@ -135,12 +120,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onOpenProfile}
             aria-label="Gamer Profile"
             className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 transition-all cursor-pointer shadow-sm active:scale-95 group"
-            title="View or Edit Gamer Profile"
+            title={profile?.email ? `Logged in as ${profile.email}` : 'Gamer Profile & Account'}
           >
-            <div
-              className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-gradient-to-br ${activeAvatar.gradient} flex items-center justify-center text-xs shadow-sm shrink-0`}
-            >
-              <span>{activeAvatar.emoji}</span>
+            <div className="relative">
+              <div
+                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-gradient-to-br ${activeAvatar.gradient} flex items-center justify-center text-xs shadow-sm shrink-0`}
+              >
+                <span>{activeAvatar.emoji}</span>
+              </div>
+              {profile?.isVerified && profile?.email && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white dark:border-slate-900" />
+              )}
             </div>
             <span className="hidden lg:inline font-semibold truncate max-w-[90px]">
               {profile?.displayName || 'Profile'}

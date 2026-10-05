@@ -3,10 +3,12 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CACHE_FILE = path.resolve(__dirname, '.rooms-cache.json');
+const ACCOUNTS_FILE = path.resolve(__dirname, '.accounts-cache.json');
 
 interface ChatMessage {
   id: string;
@@ -98,13 +100,285 @@ function broadcastRoom(room: OnlineRoom) {
   }
 }
 
+interface StoredUserAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  username: string;
+  avatar: string;
+  title: string;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  bestStreak: number;
+  passwordHash?: string;
+  isVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const accountsByEmail = new Map<string, StoredUserAccount>();
+
+function loadAccountsFromDisk() {
+  try {
+    if (fs.existsSync(ACCOUNTS_FILE)) {
+      const raw = fs.readFileSync(ACCOUNTS_FILE, 'utf-8');
+      const list = JSON.parse(raw) as StoredUserAccount[];
+      for (const acc of list) {
+        if (acc && acc.email) {
+          accountsByEmail.set(acc.email.toLowerCase().trim(), acc);
+        }
+      }
+      console.log(`Loaded ${accountsByEmail.size} user accounts from disk`);
+    }
+  } catch (err) {
+    console.warn('Could not load cached accounts:', err);
+  }
+}
+
+function saveAccountsToDisk() {
+  try {
+    const list = Array.from(accountsByEmail.values());
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Could not save accounts to disk:', err);
+  }
+}
+
+loadAccountsFromDisk();
+
+interface PendingVerification {
+  code: string;
+  email: string;
+  displayName: string;
+  username?: string;
+  avatar?: string;
+  password?: string;
+  expiresAt: number;
+}
+
+const pendingVerifications = new Map<string, PendingVerification>();
+
+// Mail transporter configuration
+const mailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.ethereal.email',
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: process.env.SMTP_USER
+    ? {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      }
+    : undefined,
+});
+
+async function sendAccountVerificationEmail(toEmail: string, code: string, displayName: string) {
+  try {
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      await mailTransporter.sendMail({
+        from: process.env.SMTP_FROM || '"Apex Arena" <no-reply@apexarena.game>',
+        to: toEmail,
+        subject: `Apex Arena - Verification Code: ${code}`,
+        text: `Hello ${displayName},\n\nYour account verification code is: ${code}\n\nOnce entered: your account has been created successfully!\n\nWelcome to Apex Arena!`,
+        html: `
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #030712; color: #f9fafb; padding: 32px 24px; border-radius: 20px; max-width: 520px; margin: auto; border: 1px solid #1f2937;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <h1 style="color: #06b6d4; font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Apex Arena</h1>
+              <p style="color: #9ca3af; font-size: 13px; margin-top: 6px;">Next-Gen Multiplayer Tic-Tac-Toe</p>
+            </div>
+            <div style="background-color: #111827; border: 1px solid #374151; border-radius: 16px; padding: 24px; text-align: center;">
+              <p style="color: #e5e7eb; font-size: 15px; margin: 0 0 16px 0;">Welcome, <strong>${displayName}</strong>! Verify your email to activate your account.</p>
+              <div style="background: #1f2937; border: 2px dashed #06b6d4; border-radius: 12px; padding: 18px; margin: 16px 0;">
+                <div style="font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;">Your 6-Digit Code</div>
+                <div style="font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #38bdf8; font-family: monospace;">${code}</div>
+              </div>
+              <p style="color: #10b981; font-weight: 600; font-size: 13px; margin: 12px 0 0 0;">✨ Your account has been created successfully once verified!</p>
+            </div>
+            <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 24px;">Code expires in 10 minutes. If you did not request this, you can safely ignore this email.</p>
+          </div>
+        `,
+      });
+      console.log(`[AUTH] Sent verification email to ${toEmail}`);
+    } else {
+      console.log(`[AUTH] Simulated email to ${toEmail} with code ${code}`);
+    }
+  } catch (err) {
+    console.warn(`[AUTH] Could not send live email to ${toEmail}:`, err);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
   app.use(express.json({ limit: '2mb' }));
 
-  // API Routes: List open waiting rooms
+  // ---------------- AUTH API ROUTES ----------------
+
+  // Check if an email is already registered
+  app.post('/api/auth/check-email', (req: Request, res: Response) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+    const exists = accountsByEmail.has(email);
+    res.json({ exists, email });
+  });
+
+  // Request 6-digit verification code for new account registration
+  app.post('/api/auth/send-code', async (req: Request, res: Response) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const displayName = String(req.body.displayName || email.split('@')[0]).trim();
+    const username = String(req.body.username || email.split('@')[0]).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const avatar = String(req.body.avatar || 'cyber-ninja');
+    const password = String(req.body.password || '');
+
+    if (!email || !email.includes('@') || !email.includes('.')) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // Rule: "ek email se ek hi account bane"
+    if (accountsByEmail.has(email)) {
+      return res.status(409).json({
+        error: 'An account with this email already exists. Please log in instead.',
+        isExistingUser: true,
+      });
+    }
+
+    // Generate 6-digit verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    pendingVerifications.set(email, {
+      code,
+      email,
+      displayName,
+      username,
+      avatar,
+      password,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
+    await sendAccountVerificationEmail(email, code, displayName);
+
+    res.json({
+      success: true,
+      message: `Verification code sent to ${email}`,
+      code, // returned so preview users without external SMTP can also instantly verify
+      email,
+    });
+  });
+
+  // Verify code and complete account registration
+  app.post('/api/auth/verify-code', (req: Request, res: Response) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const code = String(req.body.code || '').trim();
+
+    const pending = pendingVerifications.get(email);
+    if (!pending) {
+      return res.status(400).json({
+        error: 'No pending verification found for this email. Please request a new code.',
+      });
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      pendingVerifications.delete(email);
+      return res.status(400).json({
+        error: 'Verification code has expired. Please request a new code.',
+      });
+    }
+
+    if (pending.code !== code) {
+      return res.status(400).json({
+        error: 'Invalid verification code. Please check your email and try again.',
+      });
+    }
+
+    // Ensure email is not already registered
+    if (accountsByEmail.has(email)) {
+      pendingVerifications.delete(email);
+      return res.status(409).json({
+        error: 'An account with this email already exists.',
+      });
+    }
+
+    // Create verified account
+    const uid = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newAccount: StoredUserAccount = {
+      uid,
+      email,
+      displayName: pending.displayName || email.split('@')[0],
+      username: (pending.username || email.split('@')[0]).replace(/[^a-z0-9_]/g, '').slice(0, 20),
+      avatar: pending.avatar || 'cyber-ninja',
+      title: 'Arena Tactician',
+      totalGames: 0,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      bestStreak: 0,
+      passwordHash: pending.password ? Buffer.from(pending.password).toString('base64') : undefined,
+      isVerified: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    accountsByEmail.set(email, newAccount);
+    saveAccountsToDisk();
+    pendingVerifications.delete(email);
+
+    res.json({
+      success: true,
+      message: 'your account has been created sucessfully',
+      profile: newAccount,
+    });
+  });
+
+  // Login existing user with email & password
+  app.post('/api/auth/login', (req: Request, res: Response) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+
+    const account = accountsByEmail.get(email);
+    if (!account) {
+      return res.status(404).json({
+        error: 'No account registered with this email. Please create a new account.',
+        isNewUser: true,
+      });
+    }
+
+    if (account.passwordHash && password) {
+      const enteredHash = Buffer.from(password).toString('base64');
+      if (account.passwordHash !== enteredHash) {
+        return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Welcome back, ${account.displayName}!`,
+      profile: account,
+    });
+  });
+
+  // Save profile updates
+  app.post('/api/auth/save-profile', (req: Request, res: Response) => {
+    const profile = req.body.profile as StoredUserAccount;
+    if (!profile || !profile.email) {
+      return res.status(400).json({ error: 'Profile and email required' });
+    }
+    const email = profile.email.toLowerCase().trim();
+    const existing = accountsByEmail.get(email);
+    const merged: StoredUserAccount = {
+      ...(existing || {}),
+      ...profile,
+      email,
+      updatedAt: new Date().toISOString(),
+    };
+    accountsByEmail.set(email, merged);
+    saveAccountsToDisk();
+    res.json({ success: true, profile: merged });
+  });
+
+  // ---------------- ROOMS API ROUTES ----------------
   app.get('/api/rooms', (req: Request, res: Response) => {
     const openRooms: OnlineRoom[] = [];
     for (const room of rooms.values()) {
@@ -228,7 +502,7 @@ async function startServer() {
     }
 
     const cellCount =
-      selectedMode === 'grid12x12' ? 144 : selectedMode === 'grid6x6' ? 36 : selectedMode === 'grid4x4' ? 16 : 9;
+      selectedMode === 'grid6x6' ? 36 : selectedMode === 'grid4x4' ? 16 : 9;
 
     const newRoom: OnlineRoom = {
       id: newId,
