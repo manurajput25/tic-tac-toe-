@@ -35,7 +35,7 @@ const defaultScore = (): GameScore => ({
 });
 
 const getCellCount = (m: GameMode): number =>
-  m === 'grid6x6' ? 36 : m === 'grid4x4' ? 16 : 9;
+  m === 'grid6x6' ? 36 : 9;
 
 export interface UseGameEngineOptions {
   mode: GameMode;
@@ -405,8 +405,6 @@ export function useGameEngine({
       let botMove = -1;
       if (mode === 'grid6x6') {
         botMove = getBestMove6x6(board, 'O', botDifficulty);
-      } else if (mode === 'grid4x4') {
-        botMove = getBestMove4x4(board, 'O', botDifficulty);
       } else if (mode === 'infinite3') {
         botMove = getBestMoveInfinite(board, oPieceIndices, xPieceIndices, 'O', botDifficulty);
       } else {

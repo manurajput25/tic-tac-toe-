@@ -132,9 +132,6 @@ export function checkWin(board: CellValue[], mode: GameMode): WinningLine | null
   if (mode === 'grid6x6') {
     return checkWin6x6(board);
   }
-  if (mode === 'grid4x4') {
-    return checkWin4x4(board);
-  }
   return checkWin3x3(board);
 }
 
@@ -467,9 +464,6 @@ export function getHintMove(
 ): number {
   if (mode === 'grid6x6') {
     return getBestMove6x6(board, currentPlayer, 'unbeatable');
-  }
-  if (mode === 'grid4x4') {
-    return getBestMove4x4(board, currentPlayer, 'unbeatable');
   }
   if (mode === 'infinite3') {
     const aiHist = currentPlayer === 'X' ? xHistory : oHistory;

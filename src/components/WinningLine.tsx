@@ -17,7 +17,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
   const color = winner === 'X' ? theme.xColor : theme.oColor;
   const glow = winner === 'X' ? theme.xGlow : theme.oGlow;
 
-  const size = mode === 'grid6x6' ? 6 : mode === 'grid4x4' ? 4 : 3;
+  const size = mode === 'grid6x6' ? 6 : 3;
   const first = winningLine.indices[0];
   const last = winningLine.indices[winningLine.indices.length - 1];
 
@@ -37,7 +37,7 @@ export const WinningLine: React.FC<WinningLineProps> = ({
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const dist = Math.hypot(dx, dy) || 1;
-  const extension = size === 6 ? 2.5 : size === 4 ? 4 : 5.5;
+  const extension = size === 6 ? 2.5 : 5.5;
 
   const x1 = start.x - (dx / dist) * extension;
   const y1 = start.y - (dy / dist) * extension;

@@ -2,6 +2,7 @@ import React from 'react';
 import { Player, GameStatus, OpponentType, ThemeConfig } from '../types/game';
 import { RotateCcw, Eye, Equal } from 'lucide-react';
 import { MarkIcon } from './MarkIcon';
+import { UserAvatar } from './UserAvatar';
 
 interface GameOverModalProps {
   status: GameStatus;
@@ -11,6 +12,8 @@ interface GameOverModalProps {
   streakCount?: number;
   playerXName?: string;
   playerOName?: string;
+  winnerAvatar?: string | null;
+  winnerPhotoURL?: string | null;
   onPlayAgain: () => void;
   onReviewMatch: () => void;
   onClose: () => void;
@@ -24,6 +27,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   streakCount,
   playerXName,
   playerOName,
+  winnerAvatar,
+  winnerPhotoURL,
   onPlayAgain,
   onReviewMatch,
   onClose,
@@ -74,7 +79,24 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               boxShadow: isWin ? `0 0 30px ${accentColor}40` : undefined,
             }}
           >
-            {isWin && winner ? (
+            {isWin && winner && (winnerPhotoURL || winnerAvatar) ? (
+              <div className="relative">
+                <UserAvatar
+                  avatar={winnerAvatar}
+                  photoURL={winnerPhotoURL}
+                  size="lg"
+                />
+                <span
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shadow-lg border-2 border-white dark:border-slate-900"
+                  style={{
+                    backgroundColor: accentColor,
+                    color: '#020617',
+                  }}
+                >
+                  {winner === 'X' ? '✕' : '◯'}
+                </span>
+              </div>
+            ) : isWin && winner ? (
               <MarkIcon player={winner} theme={theme} size="lg" animated={false} />
             ) : (
               <Equal className="w-9 h-9 text-slate-400" />

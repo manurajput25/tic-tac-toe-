@@ -53,13 +53,8 @@ export const Board: React.FC<BoardProps> = ({
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
 
   const is6x6 = mode === 'grid6x6';
-  const is4x4 = mode === 'grid4x4';
-  const size = is6x6 ? 6 : is4x4 ? 4 : 3;
-  const gridColsClass = is6x6
-    ? 'grid-cols-6'
-    : is4x4
-    ? 'grid-cols-4'
-    : 'grid-cols-3';
+  const size = is6x6 ? 6 : 3;
+  const gridColsClass = is6x6 ? 'grid-cols-6' : 'grid-cols-3';
 
   // Determine if a cell is the oldest for X or O in infinite mode
   const getInfiniteInfo = (index: number) => {
@@ -100,12 +95,9 @@ export const Board: React.FC<BoardProps> = ({
 
   // Compute cell classes based on CellFinish & BoardStyle
   const getCellClasses = (canClick: boolean, isWinning: boolean, isHint: boolean) => {
-    const cellRadius =
-      is6x6
-        ? 'rounded-lg sm:rounded-xl'
-        : is4x4
-        ? 'rounded-xl sm:rounded-2xl'
-        : 'rounded-xl sm:rounded-2xl';
+    const cellRadius = is6x6
+      ? 'rounded-lg sm:rounded-xl'
+      : 'rounded-xl sm:rounded-2xl';
 
     let base =
       `relative ${cellRadius} flex items-center justify-center transition-all duration-200 focus:outline-none select-none overflow-hidden group border`;
@@ -153,8 +145,6 @@ export const Board: React.FC<BoardProps> = ({
       className={`relative mx-auto w-full ${
         is6x6
           ? 'max-w-[min(94vw,min(460px,50vh))]'
-          : is4x4
-          ? 'max-w-[min(92vw,min(420px,46vh))]'
           : 'max-w-[min(92vw,min(390px,44vh))]'
       } aspect-square transition-all duration-500`}
     >
@@ -194,7 +184,7 @@ export const Board: React.FC<BoardProps> = ({
       {/* Board Chassis Container */}
       <div
         className={`relative w-full h-full ${
-          is6x6 ? 'p-2 sm:p-3.5' : is4x4 ? 'p-2.5 sm:p-3.5' : 'p-2.5 sm:p-4'
+          is6x6 ? 'p-2 sm:p-3.5' : 'p-2.5 sm:p-4'
         } ${getBoardChassisClasses()}`}
         style={
           theme.isCustom && theme.gridBorder && theme.gridBorder.startsWith('#')
@@ -225,7 +215,7 @@ export const Board: React.FC<BoardProps> = ({
           role="grid"
           aria-label="Tic-Tac-Toe Game Board"
           className={`relative z-10 w-full h-full grid ${gridColsClass} ${
-            is6x6 ? 'gap-1 sm:gap-2' : is4x4 ? 'gap-1.5 sm:gap-2.5' : 'gap-2 sm:gap-3'
+            is6x6 ? 'gap-1 sm:gap-2' : 'gap-2 sm:gap-3'
           }`}
         >
           {board.map((cell, index) => {
@@ -274,7 +264,7 @@ export const Board: React.FC<BoardProps> = ({
                   <MarkIcon
                     player={cell}
                     theme={theme}
-                    size={is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
+                    size={is6x6 ? 'sm' : 'lg'}
                     isExpiring={isExpiring}
                     orderNumber={order}
                     markStyle={customization.markStyle}
@@ -287,7 +277,7 @@ export const Board: React.FC<BoardProps> = ({
                       <MarkIcon
                         player={currentPlayer}
                         theme={theme}
-                        size={is6x6 ? 'sm' : is4x4 ? 'md' : 'lg'}
+                        size={is6x6 ? 'sm' : 'lg'}
                         animated={false}
                         markStyle={customization.markStyle}
                       />

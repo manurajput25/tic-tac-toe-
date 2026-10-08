@@ -370,11 +370,10 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                   <label className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold mb-1.5">
                     Select Match Mode:
                   </label>
-                  <div className="grid grid-cols-2 gap-1.5 mb-3">
+                  <div className="grid grid-cols-3 gap-1.5 mb-3">
                     {[
                       { id: 'classic3x3', label: 'Classic 3×3' },
                       { id: 'infinite3', label: 'Infinite 3' },
-                      { id: 'grid4x4', label: 'Grid 4×4' },
                       { id: 'grid6x6', label: 'Grid 6×6' },
                     ].map((m) => (
                       <button

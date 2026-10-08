@@ -14,7 +14,7 @@ export interface SoundPackConfig {
 export type Player = 'X' | 'O';
 export type CellValue = Player | null;
 
-export type GameMode = 'classic3x3' | 'infinite3' | 'grid4x4' | 'grid6x6';
+export type GameMode = 'classic3x3' | 'infinite3' | 'grid6x6';
 export type OpponentType = 'bot' | 'pvp' | 'online';
 export type BotDifficulty = 'easy' | 'medium' | 'unbeatable';
 
@@ -101,10 +101,12 @@ export interface OnlineRoom {
   hostId: string;
   hostName: string;
   hostAvatar: string;
+  hostPhotoURL?: string | null;
   hostMark: Player;
   guestId?: string | null;
   guestName?: string | null;
   guestAvatar?: string | null;
+  guestPhotoURL?: string | null;
   guestMark?: Player | null;
   currentTurn: Player;
   board: (Player | null)[];

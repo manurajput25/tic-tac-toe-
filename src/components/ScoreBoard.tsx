@@ -1,6 +1,7 @@
 import React from 'react';
 import { Player, GameScore, OpponentType, BotDifficulty, ThemeConfig } from '../types/game';
 import { Bot, User, Flame, Clock } from 'lucide-react';
+import { UserAvatar } from './UserAvatar';
 
 interface ScoreBoardProps {
   score: GameScore;
@@ -14,6 +15,10 @@ interface ScoreBoardProps {
   isBotThinking: boolean;
   playerXLabel?: string;
   playerOLabel?: string;
+  playerXAvatar?: string | null;
+  playerXPhotoURL?: string | null;
+  playerOAvatar?: string | null;
+  playerOPhotoURL?: string | null;
   onlineRoomCode?: string | null;
 }
 
@@ -29,6 +34,10 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
   isBotThinking,
   playerXLabel,
   playerOLabel,
+  playerXAvatar,
+  playerXPhotoURL,
+  playerOAvatar,
+  playerOPhotoURL,
   onlineRoomCode,
 }) => {
   const isXTurn = currentPlayer === 'X';
@@ -104,16 +113,41 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-              <div
-                className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
-                style={{
-                  backgroundColor: `${theme.xColor}18`,
-                  color: theme.xColor,
-                  borderColor: `${theme.xColor}40`,
-                  boxShadow: isXTurn ? `0 0 12px ${theme.xGlow}` : 'none',
-                }}
-              >
-                ✕
+              {/* Profile Avatar & Corner Mark Badge */}
+              <div className="relative shrink-0">
+                {opponent === 'online' || playerXPhotoURL ? (
+                  <>
+                    <UserAvatar
+                      avatar={playerXAvatar}
+                      photoURL={playerXPhotoURL}
+                      size="md"
+                      className="ring-2 ring-cyan-500/40"
+                    />
+                    <span
+                      className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none"
+                      style={{
+                        backgroundColor: theme.xColor,
+                        color: '#020617',
+                        boxShadow: isXTurn ? `0 0 10px ${theme.xGlow}` : undefined,
+                      }}
+                      title="Player X"
+                    >
+                      ✕
+                    </span>
+                  </>
+                ) : (
+                  <div
+                    className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
+                    style={{
+                      backgroundColor: `${theme.xColor}18`,
+                      color: theme.xColor,
+                      borderColor: `${theme.xColor}40`,
+                      boxShadow: isXTurn ? `0 0 12px ${theme.xGlow}` : 'none',
+                    }}
+                  >
+                    ✕
+                  </div>
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1">
@@ -166,16 +200,79 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-              <div
-                className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
-                style={{
-                  backgroundColor: `${theme.oColor}18`,
-                  color: theme.oColor,
-                  borderColor: `${theme.oColor}40`,
-                  boxShadow: isOTurn ? `0 0 12px ${theme.oGlow}` : 'none',
-                }}
-              >
-                ◯
+              {/* Profile Avatar & Corner Mark Badge */}
+              <div className="relative shrink-0">
+                {opponent === 'online' ? (
+                  playerOLabel === 'Waiting...' || (!playerOAvatar && !playerOPhotoURL) ? (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl border-2 border-dashed border-rose-500/40 bg-rose-500/10 flex items-center justify-center animate-pulse text-rose-500 text-xs">
+                      <Clock className="w-4 h-4 animate-spin text-rose-400" />
+                    </div>
+                  ) : (
+                    <>
+                      <UserAvatar
+                        avatar={playerOAvatar}
+                        photoURL={playerOPhotoURL}
+                        size="md"
+                        className="ring-2 ring-rose-500/40"
+                      />
+                      <span
+                        className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none"
+                        style={{
+                          backgroundColor: theme.oColor,
+                          color: '#020617',
+                          boxShadow: isOTurn ? `0 0 10px ${theme.oGlow}` : undefined,
+                        }}
+                        title="Player O"
+                      >
+                        ◯
+                      </span>
+                    </>
+                  )
+                ) : opponent === 'bot' ? (
+                  <div
+                    className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
+                    style={{
+                      backgroundColor: `${theme.oColor}18`,
+                      color: theme.oColor,
+                      borderColor: `${theme.oColor}40`,
+                      boxShadow: isOTurn ? `0 0 12px ${theme.oGlow}` : 'none',
+                    }}
+                  >
+                    <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-rose-500" />
+                  </div>
+                ) : playerOPhotoURL ? (
+                  <>
+                    <UserAvatar
+                      avatar={playerOAvatar}
+                      photoURL={playerOPhotoURL}
+                      size="md"
+                      className="ring-2 ring-rose-500/40"
+                    />
+                    <span
+                      className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none"
+                      style={{
+                        backgroundColor: theme.oColor,
+                        color: '#020617',
+                        boxShadow: isOTurn ? `0 0 10px ${theme.oGlow}` : undefined,
+                      }}
+                      title="Player O"
+                    >
+                      ◯
+                    </span>
+                  </>
+                ) : (
+                  <div
+                    className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
+                    style={{
+                      backgroundColor: `${theme.oColor}18`,
+                      color: theme.oColor,
+                      borderColor: `${theme.oColor}40`,
+                      boxShadow: isOTurn ? `0 0 12px ${theme.oGlow}` : 'none',
+                    }}
+                  >
+                    ◯
+                  </div>
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1">

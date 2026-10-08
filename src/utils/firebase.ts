@@ -479,7 +479,7 @@ export async function createOnlineRoom(
   const path = `rooms/${roomId}`;
 
   const cellCount =
-    mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
+    mode === 'grid6x6' ? 36 : 9;
 
   const newRoom: OnlineRoom = {
     id: roomId,
@@ -488,6 +488,7 @@ export async function createOnlineRoom(
     hostId: hostProfile.uid,
     hostName: hostProfile.displayName,
     hostAvatar: hostProfile.avatar,
+    hostPhotoURL: hostProfile.photoURL || null,
     hostMark: 'X',
     guestId: null,
     guestName: null,
@@ -602,6 +603,7 @@ export async function joinOnlineRoom(
       guestId: challengerUid,
       guestName: `${guestProfile.displayName} (Challenger)`,
       guestAvatar: guestProfile.avatar === 'cyber-ninja' ? 'solar-phoenix' : 'cyber-ninja',
+      guestPhotoURL: guestProfile.photoURL || null,
       guestMark: 'O',
       status: 'playing',
       updatedAt: new Date().toISOString(),
@@ -628,6 +630,7 @@ export async function joinOnlineRoom(
     guestId: guestProfile.uid,
     guestName: guestProfile.displayName,
     guestAvatar: guestProfile.avatar,
+    guestPhotoURL: guestProfile.photoURL || null,
     guestMark: 'O',
     status: 'playing',
     updatedAt: new Date().toISOString(),

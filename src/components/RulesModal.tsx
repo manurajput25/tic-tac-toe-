@@ -53,17 +53,6 @@ export const RulesModal: React.FC<RulesModalProps> = ({ onClose }) => {
             </ul>
           </div>
 
-          {/* Grid 4x4 */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-1.5 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
-              Grid 4×4 Tactical
-            </h4>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Expanded strategic arena with 16 cells. Align <strong>4 in a row</strong> horizontally, vertical, or diagonally. Controlling the central 2×2 quad is key to dominating diagonal corridors.
-            </p>
-          </div>
-
           {/* Grid 6x6 */}
           <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
             <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-1.5 flex items-center gap-2">

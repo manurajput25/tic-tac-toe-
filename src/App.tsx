@@ -12,6 +12,7 @@ import {
   ColorMode,
   BoardCustomization,
   BackgroundCustomization,
+  SoundPackId,
 } from './types/game';
 import { THEMES, customPaletteToTheme } from './utils/theme';
 import { sound } from './utils/audio';
@@ -80,6 +81,7 @@ export default function App() {
   const [startingPlayer, setStartingPlayer] = useState<'X' | 'O' | 'alternate'>('alternate');
   const [blitzDuration, setBlitzDuration] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => sound.getMuted());
+  const [soundPack, setSoundPack] = useState<SoundPackId>(() => sound.getSoundPack());
   const [boardCustomization, setBoardCustomization] = useState<BoardCustomization>(DEFAULT_BOARD_CUSTOMIZATION);
   const [backgroundCustomization, setBackgroundCustomization] = useState<BackgroundCustomization>(DEFAULT_BACKGROUND_CUSTOMIZATION);
 
@@ -216,13 +218,17 @@ export default function App() {
       const saved = localStorage.getItem(PREFS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.mode) setMode(parsed.mode);
+        if (parsed.mode && (parsed.mode as string) !== 'grid4x4') setMode(parsed.mode);
         if (parsed.opponent) setOpponent(parsed.opponent);
         if (parsed.botDifficulty) setBotDifficulty(parsed.botDifficulty);
         if (parsed.themeId) setThemeId(parsed.themeId);
         if (parsed.colorMode) setColorMode(parsed.colorMode);
         if (parsed.startingPlayer) setStartingPlayer(parsed.startingPlayer);
         if (parsed.blitzDuration !== undefined) setBlitzDuration(parsed.blitzDuration);
+        if (parsed.soundPack) {
+          setSoundPack(parsed.soundPack);
+          sound.setSoundPack(parsed.soundPack);
+        }
         if (parsed.boardCustomization) {
           setBoardCustomization((prev) => ({ ...prev, ...parsed.boardCustomization }));
         }
@@ -548,6 +554,26 @@ export default function App() {
                 : 'Waiting...'
               : 'Player O'
           }
+          playerXAvatar={
+            opponent === 'online'
+              ? activeOnlineRoom?.hostAvatar || (onlineUserMark === 'X' ? userProfile.avatar : 'cyber-ninja')
+              : userProfile.avatar
+          }
+          playerXPhotoURL={
+            opponent === 'online'
+              ? activeOnlineRoom?.hostPhotoURL || (onlineUserMark === 'X' ? userProfile.photoURL : null)
+              : userProfile.photoURL
+          }
+          playerOAvatar={
+            opponent === 'online'
+              ? activeOnlineRoom?.guestAvatar || (onlineUserMark === 'O' ? userProfile.avatar : null)
+              : undefined
+          }
+          playerOPhotoURL={
+            opponent === 'online'
+              ? activeOnlineRoom?.guestPhotoURL || (onlineUserMark === 'O' ? userProfile.photoURL : null)
+              : undefined
+          }
           onlineRoomCode={opponent === 'online' ? activeOnlineRoom?.id : null}
         />
 
@@ -653,9 +679,23 @@ export default function App() {
               ? activeOnlineRoom?.guestName || 'Challenger'
               : 'Player O'
           }
+          winnerAvatar={
+            engine.winner === 'X'
+              ? (opponent === 'online' ? activeOnlineRoom?.hostAvatar : userProfile.avatar)
+              : engine.winner === 'O'
+              ? (opponent === 'online' ? activeOnlineRoom?.guestAvatar : undefined)
+              : undefined
+          }
+          winnerPhotoURL={
+            engine.winner === 'X'
+              ? (opponent === 'online' ? (activeOnlineRoom?.hostPhotoURL || (onlineUserMark === 'X' ? userProfile.photoURL : null)) : userProfile.photoURL)
+              : engine.winner === 'O'
+              ? (opponent === 'online' ? (activeOnlineRoom?.guestPhotoURL || (onlineUserMark === 'O' ? userProfile.photoURL : null)) : undefined)
+              : undefined
+          }
           onPlayAgain={() => {
             if (opponent === 'online' && activeOnlineRoom) {
-              const cells = mode === 'grid6x6' ? 36 : mode === 'grid4x4' ? 16 : 9;
+              const cells = mode === 'grid6x6' ? 36 : 9;
               requestOnlineRematch(activeOnlineRoom.id, userProfile?.uid || 'anon', cells);
               setIsGameOverModalOpen(false);
             } else {
@@ -702,6 +742,12 @@ export default function App() {
           }}
           isMuted={isMuted}
           onToggleMute={() => setIsMuted(sound.toggleMute())}
+          soundPack={soundPack}
+          onSelectSoundPack={(pack) => {
+            sound.setSoundPack(pack);
+            setSoundPack(pack);
+            savePrefs({ soundPack: pack });
+          }}
           startingPlayer={startingPlayer}
           onSelectStartingPlayer={(starter) => {
             sound.playClick();

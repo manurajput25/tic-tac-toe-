@@ -26,10 +26,12 @@ interface OnlineRoom {
   hostId: string;
   hostName: string;
   hostAvatar?: string;
+  hostPhotoURL?: string | null;
   hostMark: 'X';
   guestId?: string | null;
   guestName?: string | null;
   guestAvatar?: string | null;
+  guestPhotoURL?: string | null;
   guestMark?: 'O' | null;
   currentTurn: 'X' | 'O';
   board: (string | null)[];
@@ -480,6 +482,7 @@ async function startServer() {
       room.guestId = challengerId;
       room.guestName = `${guestProfile.displayName} (Challenger)`;
       room.guestAvatar = guestProfile.avatar === 'cyber-ninja' ? 'solar-phoenix' : 'cyber-ninja';
+      room.guestPhotoURL = guestProfile.photoURL || null;
       room.guestMark = 'O';
       room.status = 'playing';
       room.updatedAt = new Date().toISOString();
@@ -502,6 +505,7 @@ async function startServer() {
     room.guestId = guestProfile.uid;
     room.guestName = guestProfile.displayName;
     room.guestAvatar = guestProfile.avatar;
+    room.guestPhotoURL = guestProfile.photoURL || null;
     room.guestMark = 'O';
     room.status = 'playing';
     room.updatedAt = new Date().toISOString();

@@ -138,9 +138,6 @@ export const GameControls: React.FC<GameControlsProps> = ({
             <strong className="text-amber-600 dark:text-amber-300 font-semibold">Infinite 3-Piece Mode:</strong> Each player holds only 3 marks maximum. Placing your 4th mark evaporates your oldest piece!
           </span>
         )}
-        {gameMode === 'grid4x4' && (
-          <span>4×4 Tactical Arena: Line up 4 in a row to win. Dominate the central quads!</span>
-        )}
         {gameMode === 'grid6x6' && (
           <span>6×6 Grand Arena: Align 4 consecutive marks across 36 cells. Master open ends and forks!</span>
         )}

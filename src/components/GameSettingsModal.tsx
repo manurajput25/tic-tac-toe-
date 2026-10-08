@@ -16,6 +16,7 @@ import {
   UserProfile,
   CustomPalette,
   PaletteVibe,
+  SoundPackId,
 } from '../types/game';
 import { THEMES, BACKGROUND_THEMES } from '../utils/theme';
 import { PreviewArena } from './PreviewArena';
@@ -45,8 +46,10 @@ import {
   BarChart2,
   BookOpen,
   Trophy,
+  Play,
+  Music,
 } from 'lucide-react';
-import { sound } from '../utils/audio';
+import { sound, SOUND_PACKS } from '../utils/audio';
 
 interface GameSettingsModalProps {
   currentTheme: ThemeId;
@@ -57,6 +60,8 @@ interface GameSettingsModalProps {
   onSelectBlitz: (seconds: number | null) => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  soundPack?: SoundPackId;
+  onSelectSoundPack?: (pack: SoundPackId) => void;
   startingPlayer: 'X' | 'O' | 'alternate';
   onSelectStartingPlayer: (starter: 'X' | 'O' | 'alternate') => void;
   boardCustomization: BoardCustomization;
@@ -74,7 +79,7 @@ interface GameSettingsModalProps {
   onClose: () => void;
 }
 
-type TabKey = 'board' | 'background' | 'themes' | 'stats' | 'rules';
+type TabKey = 'board' | 'background' | 'themes' | 'audio' | 'stats' | 'rules';
 
 export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
   currentTheme,
@@ -85,6 +90,8 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
   onSelectBlitz,
   isMuted,
   onToggleMute,
+  soundPack,
+  onSelectSoundPack,
   startingPlayer,
   onSelectStartingPlayer,
   boardCustomization,
@@ -102,6 +109,9 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('board');
+  const [activeSoundPack, setActiveSoundPack] = useState<SoundPackId>(
+    soundPack || sound.getSoundPack()
+  );
   const [isPeeking, setIsPeeking] = useState<boolean>(false);
   const [showMobilePreview, setShowMobilePreview] = useState<boolean>(true);
   const [confirmReset, setConfirmReset] = useState<boolean>(false);
@@ -187,18 +197,26 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
               <span className="hidden lg:inline capitalize font-medium">{colorMode}</span>
             </button>
 
-            {/* Quick Sound Toggle */}
+            {/* Quick Sound Toggle & Sound Pack Indicator */}
             <button
-              onClick={onToggleMute}
+              onClick={() => {
+                if (isMuted) {
+                  onToggleMute();
+                } else {
+                  setActiveTab('audio');
+                }
+              }}
               className="p-2 sm:px-2.5 sm:py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+              title={isMuted ? 'Audio is Muted (Click to Unmute)' : `Sound Pack: ${SOUND_PACKS.find((p) => p.id === activeSoundPack)?.name} (Click to Configure)`}
             >
               {isMuted ? (
-                <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                <VolumeX className="w-3.5 h-3.5 text-rose-500" />
               ) : (
                 <Volume2 className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
               )}
-              <span className="hidden lg:inline font-medium">{isMuted ? 'Muted' : 'Audio'}</span>
+              <span className="hidden lg:inline font-medium">
+                {isMuted ? 'Muted' : SOUND_PACKS.find((p) => p.id === activeSoundPack)?.name || 'Audio'}
+              </span>
             </button>
 
             {/* Quick Restart Round */}
@@ -269,7 +287,7 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
           {/* Right Column: Tab Switcher & Full Customization Options */}
           <div className="flex-1 min-h-0 flex flex-col p-4 sm:p-5 overflow-hidden bg-white dark:bg-slate-900">
             {/* Tab Navigation */}
-            <div className="grid grid-cols-5 gap-1 p-1 mb-4 bg-slate-100 dark:bg-slate-950/90 rounded-2xl border border-slate-200 dark:border-slate-800 shrink-0">
+            <div className="grid grid-cols-6 gap-1 p-1 mb-4 bg-slate-100 dark:bg-slate-950/90 rounded-2xl border border-slate-200 dark:border-slate-800 shrink-0">
               <button
                 onClick={() => setActiveTab('board')}
                 className={`py-2 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
@@ -304,6 +322,18 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
               >
                 <Palette className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline">Themes</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('audio')}
+                className={`py-2 px-1 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  activeTab === 'audio'
+                    ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-300 shadow-sm border border-slate-200 dark:border-slate-700/80 ring-1 ring-cyan-500/40'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Audio FX</span>
               </button>
 
               <button
@@ -1156,7 +1186,188 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 4: STATISTICS & CAREER RECORDS */}
+              {/* TAB 4: AUDIO FX & SOUND PACK THEMES */}
+              {activeTab === 'audio' && (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <Volume2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                        <span>Sound Pack Themes & FX</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Synthesized audio atmospheres for moves, victories, and tactical events
+                      </p>
+                    </div>
+
+                    {/* Master Mute / Unmute Button */}
+                    <button
+                      type="button"
+                      onClick={onToggleMute}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-sm cursor-pointer shrink-0 ${
+                        isMuted
+                          ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/25'
+                          : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25'
+                      }`}
+                    >
+                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                      <span>{isMuted ? 'Muted (Click to Unmute)' : 'Sound Enabled'}</span>
+                    </button>
+                  </div>
+
+                  {/* Sound Pack Cards Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {SOUND_PACKS.map((pack) => {
+                      const isSelected = activeSoundPack === pack.id;
+                      return (
+                        <div
+                          key={pack.id}
+                          className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between ${
+                            isSelected
+                              ? 'bg-cyan-500/10 dark:bg-cyan-950/40 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.25)] ring-2 ring-cyan-500/50'
+                              : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/70 dark:hover:bg-slate-800/70'
+                          }`}
+                        >
+                          {/* Header: Icon, Name & Tag */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-2.5">
+                                <div
+                                  className={`w-9 h-9 rounded-xl bg-gradient-to-br ${pack.vibeGradient} text-white flex items-center justify-center text-lg shadow-sm shrink-0`}
+                                >
+                                  <span>{pack.icon}</span>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                    <span>{pack.name}</span>
+                                    {isSelected && (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                    {pack.tagline}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <span
+                                className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
+                                  isSelected
+                                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                                    : 'bg-slate-200 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
+                                }`}
+                              >
+                                {isSelected ? 'Active' : pack.badge}
+                              </span>
+                            </div>
+
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed my-2.5">
+                              {pack.description}
+                            </p>
+                          </div>
+
+                          {/* Sound Previews & Equip Action */}
+                          <div className="space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800/80">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-semibold text-slate-400 mr-1">Preview:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const prev = sound.getSoundPack();
+                                  sound.setSoundPack(pack.id);
+                                  sound.playMove('X');
+                                  sound.setSoundPack(prev);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-cyan-400 text-[10px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                title="Preview Mark X Sound"
+                              >
+                                <Play className="w-2.5 h-2.5 text-cyan-500" />
+                                <span>Move X</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const prev = sound.getSoundPack();
+                                  sound.setSoundPack(pack.id);
+                                  sound.playMove('O');
+                                  sound.setSoundPack(prev);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-rose-400 text-[10px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                title="Preview Mark O Sound"
+                              >
+                                <Play className="w-2.5 h-2.5 text-rose-500" />
+                                <span>Move O</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const prev = sound.getSoundPack();
+                                  sound.setSoundPack(pack.id);
+                                  sound.playWin();
+                                  sound.setSoundPack(prev);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 text-[10px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                title="Preview Victory Jingle"
+                              >
+                                <Trophy className="w-2.5 h-2.5 text-amber-500" />
+                                <span>Fanfare</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const prev = sound.getSoundPack();
+                                  sound.setSoundPack(pack.id);
+                                  sound.playDisappear();
+                                  sound.setSoundPack(prev);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-purple-400 text-[10px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 cursor-pointer transition-colors active:scale-95"
+                                title="Preview Piece Vanish FX"
+                              >
+                                <Sparkles className="w-2.5 h-2.5 text-purple-400" />
+                                <span>Vanish</span>
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                sound.setSoundPack(pack.id);
+                                setActiveSoundPack(pack.id);
+                                onSelectSoundPack?.(pack.id);
+                                sound.playMove('X');
+                              }}
+                              className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+                                isSelected
+                                  ? 'bg-cyan-500 text-slate-950 font-black'
+                                  : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              {isSelected ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                  <span>Equipped Sound Pack</span>
+                                </>
+                              ) : (
+                                <span>Equip {pack.name} Pack</span>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Informational Tip */}
+                  <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-slate-700 dark:text-slate-300 text-xs flex items-center gap-2.5">
+                    <Sparkles className="w-4 h-4 text-cyan-500 shrink-0" />
+                    <span className="text-[11px] leading-relaxed">
+                      Sound packs synthesize distinct audio characteristics for all gameplay events — moves, tactical vanishing pieces, victories, defeats, and streak celebrations.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 5: STATISTICS & CAREER RECORDS */}
               {activeTab === 'stats' && (
                 <div className="space-y-5">
                   <div>
@@ -1314,17 +1525,8 @@ export const GameSettingsModal: React.FC<GameSettingsModalProps> = ({
                     </div>
 
                     <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
-                      <div className="text-xs font-bold text-emerald-600 dark:text-emerald-300 flex items-center gap-1.5 mb-1">
-                        <span>3. 4×4 Grid (Connect 4)</span>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                        Expanded 16-cell battleground. Requires 4 consecutive marks in a straight horizontal, vertical, or diagonal line to win.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
                       <div className="text-xs font-bold text-blue-600 dark:text-blue-300 flex items-center gap-1.5 mb-1">
-                        <span>4. 6×6 Grid (Grand Battleground)</span>
+                        <span>3. 6×6 Grid (Grand Battleground)</span>
                       </div>
                       <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                         Massive 36-cell tactical arena! Connect 4 consecutive marks in any row, column, or diagonal line to win. Master open-ended lines, traps, and multiple threats.
