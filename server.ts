@@ -15,6 +15,7 @@ interface ChatMessage {
   senderId: string;
   senderName: string;
   senderAvatar: string;
+  senderPhotoURL?: string | null;
   text: string;
   timestamp: number;
 }
@@ -239,7 +240,8 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // ---------------- AUTH API ROUTES ----------------
 
@@ -398,7 +400,7 @@ async function startServer() {
     });
   });
 
-  // Save profile updates (display name, bio, website, avatar can be updated; username is permanently locked)
+  // Save profile updates (display name, photoURL, bio, website, avatar can be updated; username is permanently locked)
   app.post('/api/auth/save-profile', (req: Request, res: Response) => {
     const profile = req.body.profile as StoredUserAccount;
     if (!profile || !profile.email) {
@@ -407,18 +409,40 @@ async function startServer() {
     const email = profile.email.toLowerCase().trim();
     const existing = accountsByEmail.get(email);
     const merged: StoredUserAccount = {
-      ...(existing || {}),
-      ...profile,
-      // Display name is changeable, but gamer handle is unique & permanently locked
-      username: existing ? existing.username : profile.username,
-      bio: profile.bio ? String(profile.bio).slice(0, 300) : (existing?.bio || ''),
-      website: profile.website ? String(profile.website).slice(0, 200) : (existing?.website || ''),
+      uid: existing?.uid || profile.uid || `user_${Date.now()}`,
       email,
+      // Display name is changeable, but gamer handle is unique & permanently locked
+      displayName: profile.displayName ? String(profile.displayName).trim().slice(0, 30) : (existing?.displayName || 'Apex Player'),
+      username: existing ? existing.username : (profile.username || generateUniqueHandleFromEmail(email, accountsByEmail)),
+      avatar: profile.avatar || existing?.avatar || 'cyber-ninja',
+      photoURL: profile.photoURL !== undefined ? profile.photoURL : (existing?.photoURL || null),
+      bio: profile.bio !== undefined ? String(profile.bio).slice(0, 300) : (existing?.bio || ''),
+      website: profile.website !== undefined ? String(profile.website).slice(0, 200) : (existing?.website || ''),
+      title: profile.title || existing?.title || 'Arena Tactician',
+      totalGames: Math.max(existing?.totalGames || 0, profile.totalGames || 0),
+      wins: Math.max(existing?.wins || 0, profile.wins || 0),
+      losses: Math.max(existing?.losses || 0, profile.losses || 0),
+      draws: Math.max(existing?.draws || 0, profile.draws || 0),
+      bestStreak: Math.max(existing?.bestStreak || 0, profile.bestStreak || 0),
+      passwordHash: existing?.passwordHash || (profile as unknown as { passwordHash?: string })?.passwordHash,
+      isVerified: existing?.isVerified ?? profile.isVerified ?? true,
+      createdAt: existing?.createdAt || profile.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     accountsByEmail.set(email, merged);
     saveAccountsToDisk();
+    console.log(`[AUTH] Profile saved & persisted for ${email}. Photo present: ${Boolean(merged.photoURL)}`);
     res.json({ success: true, profile: merged });
+  });
+
+  // Get full account profile by email
+  app.get('/api/auth/profile-by-email/:email', (req: Request, res: Response) => {
+    const email = String(req.params.email || '').toLowerCase().trim();
+    const account = accountsByEmail.get(email);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    res.json({ success: true, profile: account });
   });
 
   // ---------------- ROOMS API ROUTES ----------------
@@ -515,6 +539,35 @@ async function startServer() {
     res.json({ room });
   });
 
+  // API Routes: Update player profile within active room
+  app.post('/api/rooms/:id/update-player', (req: Request, res: Response) => {
+    const roomId = String(req.params.id || '').trim().toUpperCase();
+    const { isHost, profile } = req.body;
+    if (!profile) {
+      return res.status(400).json({ error: 'Profile required' });
+    }
+
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: `Room ${roomId} not found` });
+    }
+
+    if (isHost) {
+      room.hostName = profile.displayName || room.hostName;
+      if (profile.avatar) room.hostAvatar = profile.avatar;
+      room.hostPhotoURL = profile.photoURL || null;
+    } else {
+      room.guestName = profile.displayName || room.guestName;
+      if (profile.avatar) room.guestAvatar = profile.avatar;
+      room.guestPhotoURL = profile.photoURL || null;
+    }
+    room.updatedAt = new Date().toISOString();
+
+    rooms.set(roomId, room);
+    broadcastRoom(room);
+    res.json({ room });
+  });
+
   // API Routes: Quick Match / Auto Matchmaking
   app.post('/api/rooms/quickmatch', (req: Request, res: Response) => {
     const { playerProfile, mode } = req.body;
@@ -530,6 +583,7 @@ async function startServer() {
         room.guestId = playerProfile.uid;
         room.guestName = playerProfile.displayName;
         room.guestAvatar = playerProfile.avatar;
+        room.guestPhotoURL = playerProfile.photoURL || null;
         room.guestMark = 'O';
         room.status = 'playing';
         room.updatedAt = new Date().toISOString();
@@ -556,10 +610,12 @@ async function startServer() {
       hostId: playerProfile.uid,
       hostName: playerProfile.displayName,
       hostAvatar: playerProfile.avatar,
+      hostPhotoURL: playerProfile.photoURL || null,
       hostMark: 'X',
       guestId: null,
       guestName: null,
       guestAvatar: null,
+      guestPhotoURL: null,
       guestMark: 'O',
       currentTurn: 'X',
       board: Array(cellCount).fill(null),
@@ -606,7 +662,7 @@ async function startServer() {
   // API Routes: Send chat message
   app.post('/api/rooms/:id/chat', (req: Request, res: Response) => {
     const roomId = String(req.params.id || '').trim().toUpperCase();
-    const { senderId, senderName, senderAvatar, text } = req.body;
+    const { senderId, senderName, senderAvatar, senderPhotoURL, text } = req.body;
 
     const room = rooms.get(roomId);
     if (!room) {
@@ -623,6 +679,7 @@ async function startServer() {
       senderId,
       senderName,
       senderAvatar,
+      senderPhotoURL: senderPhotoURL || null,
       text: trimmed,
       timestamp: Date.now(),
     };

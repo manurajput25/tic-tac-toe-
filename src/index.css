@@ -77,6 +77,66 @@
   animation: themeTransitionBloom 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Subtle avatar entry animation for online players & dynamic photo loading */
+@keyframes avatarEntry {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+    filter: blur(2px);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.04);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+}
+
+@keyframes avatarBloomPulse {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.24);
+  }
+}
+
+@keyframes badgePopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-15deg);
+  }
+  70% {
+    transform: scale(1.22) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-avatar-entry {
+  animation: avatarEntry 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-avatar-bloom {
+  animation: avatarBloomPulse 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-badge-pop {
+  animation: badgePopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s backwards;
+}
+
 /* Sleek Custom Scrollbar for Workshop Dialog */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

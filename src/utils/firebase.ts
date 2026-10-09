@@ -215,13 +215,52 @@ export async function fetchProfileFromFirestore(uid: string): Promise<UserProfil
 export async function saveProfileToFirestore(profile: UserProfile): Promise<void> {
   const path = `users/${profile.uid}`;
   try {
+    // 1. Save to primary Firestore users collection by UID
     await setDoc(doc(db, 'users', profile.uid), {
       ...profile,
       updatedAt: new Date().toISOString(),
     });
+
+    // 2. If email exists, index by email in Firestore for instant cross-device and post-logout restoration
+    if (profile.email) {
+      const cleanEmail = profile.email.toLowerCase().trim();
+      const emailKey = cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_');
+      await setDoc(doc(db, 'users_by_email', emailKey), {
+        ...profile,
+        email: cleanEmail,
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => {
+        console.warn('users_by_email sync note:', err);
+      });
+
+      // 3. Sync to server persistent accounts cache
+      await fetch('/api/auth/save-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile }),
+      }).catch((err) => {
+        console.warn('Server save-profile sync note:', err);
+      });
+    }
+
     cacheProfile(profile);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+// Fetch user profile from Firestore by email
+export async function fetchProfileByEmailFromFirestore(email: string): Promise<UserProfile | null> {
+  const cleanEmail = email.toLowerCase().trim();
+  const emailKey = cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_');
+  try {
+    const snap = await getDoc(doc(db, 'users_by_email', emailKey));
+    if (snap.exists()) {
+      return snap.data() as UserProfile;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -292,13 +331,14 @@ export async function verifyAndRegisterEmailAccount(
 
   // Save profile to Firestore and local cache
   if (data.profile) {
+    localStorage.setItem('apex_last_logged_in_email', cleanEmail);
     cacheProfile(data.profile);
     saveProfileToFirestore(data.profile).catch(() => {});
   }
   return data;
 }
 
-// Login with email and password
+// Login with email and password (restores full profile including photoURL, bio, stats, and palettes like Instagram / WhatsApp)
 export async function loginWithEmail(
   email: string,
   password?: string
@@ -314,15 +354,58 @@ export async function loginWithEmail(
     throw new Error(data.error || 'Login failed');
   }
 
-  if (data.profile) {
-    cacheProfile(data.profile);
-    saveProfileToFirestore(data.profile).catch(() => {});
+  let fullProfile = data.profile as UserProfile;
+
+  // Instagram/WhatsApp-style Cloud Data Restoration:
+  // Check Firestore users_by_email and users/{uid} for any richer cloud data (photoURL, custom palettes, bio, links, stats)
+  try {
+    const emailKey = cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_');
+    const [snapEmail, snapUid] = await Promise.all([
+      getDoc(doc(db, 'users_by_email', emailKey)),
+      fullProfile.uid ? getDoc(doc(db, 'users', fullProfile.uid)) : null,
+    ]);
+
+    const firestoreData = (snapEmail?.exists() ? snapEmail.data() : snapUid?.exists() ? snapUid.data() : null) as Partial<UserProfile> | null;
+
+    if (firestoreData) {
+      fullProfile = {
+        ...fullProfile,
+        photoURL: fullProfile.photoURL || firestoreData.photoURL || null,
+        avatar: fullProfile.avatar || firestoreData.avatar || 'cyber-ninja',
+        displayName: fullProfile.displayName || firestoreData.displayName || 'Apex Player',
+        bio: fullProfile.bio || firestoreData.bio || '',
+        website: fullProfile.website || firestoreData.website || '',
+        title: fullProfile.title || firestoreData.title || 'Arena Tactician',
+        totalGames: Math.max(fullProfile.totalGames || 0, firestoreData.totalGames || 0),
+        wins: Math.max(fullProfile.wins || 0, firestoreData.wins || 0),
+        losses: Math.max(fullProfile.losses || 0, firestoreData.losses || 0),
+        draws: Math.max(fullProfile.draws || 0, firestoreData.draws || 0),
+        bestStreak: Math.max(fullProfile.bestStreak || 0, firestoreData.bestStreak || 0),
+        customPalettes: (fullProfile.customPalettes && fullProfile.customPalettes.length > 0)
+          ? fullProfile.customPalettes
+          : (firestoreData.customPalettes || []),
+        activePaletteId: fullProfile.activePaletteId || firestoreData.activePaletteId || null,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  } catch (err) {
+    console.warn('Firestore cloud profile retrieval note:', err);
   }
-  return data;
+
+  // Persist merged profile locally and in Firestore / Server
+  cacheProfile(fullProfile);
+  localStorage.setItem('apex_last_logged_in_email', cleanEmail);
+  saveProfileToFirestore(fullProfile).catch(() => {});
+
+  return { success: true, message: data.message, profile: fullProfile };
 }
 
-// Logout user and reset to clean guest profile
+// Logout user and reset to clean guest profile while safely retaining cloud credentials for 1-click re-login
 export async function logoutUser(): Promise<UserProfile> {
+  const current = getCachedProfile();
+  if (current?.email) {
+    localStorage.setItem('apex_last_logged_in_email', current.email.toLowerCase().trim());
+  }
   try {
     await auth.signOut();
   } catch {
@@ -612,6 +695,20 @@ export async function joinOnlineRoom(
     apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}/join`, 'POST', {
       guestProfile: { ...guestProfile, uid: challengerUid },
     }).catch(() => {});
+    try {
+      const roomRef = doc(db, 'rooms', cleanId);
+      await updateDoc(roomRef, {
+        guestId: challengerUid,
+        guestName: updatedRoom.guestName,
+        guestAvatar: updatedRoom.guestAvatar,
+        guestPhotoURL: updatedRoom.guestPhotoURL,
+        guestMark: 'O',
+        status: 'playing',
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {
+      // ignore
+    }
     return updatedRoom;
   }
 
@@ -642,13 +739,14 @@ export async function joinOnlineRoom(
   // Sync to server API
   apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}/join`, 'POST', { guestProfile }).catch(() => {});
 
-  // Update in Firestore asynchronously
+  // Update in Firestore asynchronously with guestPhotoURL guaranteed
   try {
     const roomRef = doc(db, 'rooms', cleanId);
     await updateDoc(roomRef, {
       guestId: guestProfile.uid,
       guestName: guestProfile.displayName,
       guestAvatar: guestProfile.avatar,
+      guestPhotoURL: guestProfile.photoURL || null,
       guestMark: 'O',
       status: 'playing',
       updatedAt: new Date().toISOString(),
@@ -764,7 +862,8 @@ export async function sendRoomChatMessage(
   senderId: string,
   senderName: string,
   senderAvatar: string,
-  text: string
+  text: string,
+  senderPhotoURL?: string | null
 ): Promise<void> {
   const trimmed = text.trim().slice(0, 150);
   if (!trimmed) return;
@@ -777,6 +876,7 @@ export async function sendRoomChatMessage(
     senderId,
     senderName,
     senderAvatar,
+    senderPhotoURL: senderPhotoURL || null,
     text: trimmed,
     timestamp: Date.now(),
   };
@@ -796,6 +896,7 @@ export async function sendRoomChatMessage(
     senderId,
     senderName,
     senderAvatar,
+    senderPhotoURL: senderPhotoURL || null,
     text: trimmed,
   }).catch(() => {});
 
@@ -808,6 +909,131 @@ export async function sendRoomChatMessage(
   } catch (err) {
     console.warn('Firestore chat update failed, relay active:', err);
   }
+}
+
+// Update player profile in an active online room (e.g. when photo, avatar, or name is saved)
+export async function updateOnlineRoomPlayerProfile(
+  roomId: string,
+  isHost: boolean,
+  profile: UserProfile
+): Promise<OnlineRoom | null> {
+  const cleanId = roomId.trim().toUpperCase();
+  const current = getLocalRoom(cleanId);
+  const updatedFields = isHost
+    ? {
+        hostName: profile.displayName,
+        hostAvatar: profile.avatar,
+        hostPhotoURL: profile.photoURL || null,
+        updatedAt: new Date().toISOString(),
+      }
+    : {
+        guestName: profile.displayName,
+        guestAvatar: profile.avatar,
+        guestPhotoURL: profile.photoURL || null,
+        updatedAt: new Date().toISOString(),
+      };
+
+  let updatedRoom: OnlineRoom | null = null;
+  if (current) {
+    updatedRoom = {
+      ...current,
+      ...updatedFields,
+    };
+    broadcastRoomUpdate(updatedRoom);
+  }
+
+  // Push to full-stack server API
+  apiCall<{ room: OnlineRoom }>(`/api/rooms/${cleanId}/update-player`, 'POST', {
+    isHost,
+    profile,
+  }).catch(() => {});
+
+  // Update in Firestore
+  try {
+    const roomRef = doc(db, 'rooms', cleanId);
+    await updateDoc(roomRef, updatedFields);
+  } catch (err) {
+    console.warn('Firestore room profile update notice:', err);
+  }
+
+  return updatedRoom;
+}
+
+// Synchronize opponent's profile picture if room was joined before photo was synced
+export async function syncRoomOpponentProfile(
+  room: OnlineRoom,
+  currentUid: string
+): Promise<OnlineRoom> {
+  let needsUpdate = false;
+  let updatedRoom: OnlineRoom = { ...room };
+  const cleanId = room.id.trim().toUpperCase();
+
+  try {
+    // If Guest is present without photo, try to resolve guest's profile
+    if (room.guestId && !room.guestPhotoURL) {
+      const guestProf = await fetchProfileFromFirestore(room.guestId);
+      if (guestProf && (guestProf.photoURL || guestProf.avatar)) {
+        if (guestProf.photoURL) updatedRoom.guestPhotoURL = guestProf.photoURL;
+        if (guestProf.avatar) updatedRoom.guestAvatar = guestProf.avatar;
+        needsUpdate = true;
+      }
+    }
+
+    // If Host is present without photo, try to resolve host's profile
+    if (room.hostId && !room.hostPhotoURL) {
+      const hostProf = await fetchProfileFromFirestore(room.hostId);
+      if (hostProf && (hostProf.photoURL || hostProf.avatar)) {
+        if (hostProf.photoURL) updatedRoom.hostPhotoURL = hostProf.photoURL;
+        if (hostProf.avatar) updatedRoom.hostAvatar = hostProf.avatar;
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
+      updatedRoom.updatedAt = new Date().toISOString();
+      broadcastRoomUpdate(updatedRoom);
+
+      // Persist to server API
+      if (updatedRoom.guestPhotoURL && !room.guestPhotoURL) {
+        apiCall(`/api/rooms/${cleanId}/update-player`, 'POST', {
+          isHost: false,
+          profile: {
+            displayName: updatedRoom.guestName,
+            avatar: updatedRoom.guestAvatar,
+            photoURL: updatedRoom.guestPhotoURL,
+          },
+        }).catch(() => {});
+      }
+      if (updatedRoom.hostPhotoURL && !room.hostPhotoURL) {
+        apiCall(`/api/rooms/${cleanId}/update-player`, 'POST', {
+          isHost: true,
+          profile: {
+            displayName: updatedRoom.hostName,
+            avatar: updatedRoom.hostAvatar,
+            photoURL: updatedRoom.hostPhotoURL,
+          },
+        }).catch(() => {});
+      }
+
+      // Persist to Firestore
+      try {
+        const roomRef = doc(db, 'rooms', cleanId);
+        await updateDoc(roomRef, {
+          ...(updatedRoom.hostPhotoURL ? { hostPhotoURL: updatedRoom.hostPhotoURL } : {}),
+          ...(updatedRoom.guestPhotoURL ? { guestPhotoURL: updatedRoom.guestPhotoURL } : {}),
+          ...(updatedRoom.hostAvatar ? { hostAvatar: updatedRoom.hostAvatar } : {}),
+          ...(updatedRoom.guestAvatar ? { guestAvatar: updatedRoom.guestAvatar } : {}),
+          updatedAt: updatedRoom.updatedAt,
+        });
+      } catch (err) {
+        console.warn('Firestore room profile sync notice:', err);
+      }
+    }
+  } catch {
+    // graceful fallback
+  }
+
+  return updatedRoom;
 }
 
 export async function requestOnlineRematch(

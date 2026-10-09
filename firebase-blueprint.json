@@ -55,6 +55,10 @@
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "User profiles indexed by UID"
     },
+    "/users_by_email/{emailKey}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles indexed by email for cross-device login sync"
+    },
     "/rooms/{roomId}": {
       "schema": { "$ref": "#/entities/MatchRoom" },
       "description": "Multiplayer match rooms"

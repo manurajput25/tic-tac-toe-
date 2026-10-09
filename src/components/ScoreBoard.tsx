@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Player, GameScore, OpponentType, BotDifficulty, ThemeConfig } from '../types/game';
 import { Bot, User, Flame, Clock } from 'lucide-react';
 import { UserAvatar } from './UserAvatar';
@@ -42,6 +42,59 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 }) => {
   const isXTurn = currentPlayer === 'X';
   const isOTurn = currentPlayer === 'O';
+
+  // Animation trackers for dynamically loaded profile pictures in online matches
+  const [xAvatarKey, setXAvatarKey] = useState<number>(0);
+  const [oAvatarKey, setOAvatarKey] = useState<number>(0);
+  const [xBloom, setXBloom] = useState<boolean>(false);
+  const [oBloom, setOBloom] = useState<boolean>(false);
+
+  const prevXPhoto = useRef<string | null | undefined>(playerXPhotoURL);
+  const prevOPhoto = useRef<string | null | undefined>(playerOPhotoURL);
+  const prevOLabel = useRef<string | undefined>(playerOLabel);
+  const isInitialMount = useRef<boolean>(true);
+
+  useEffect(() => {
+    if (opponent !== 'online') return;
+
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      setXAvatarKey((k) => k + 1);
+      setXBloom(true);
+      const timer = setTimeout(() => setXBloom(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [opponent]);
+
+  useEffect(() => {
+    if (opponent !== 'online') return;
+
+    // Trigger subtle entry animation when host photoURL dynamically resolves/changes
+    if (playerXPhotoURL && playerXPhotoURL !== prevXPhoto.current) {
+      prevXPhoto.current = playerXPhotoURL;
+      setXAvatarKey((k) => k + 1);
+      setXBloom(true);
+      const timer = setTimeout(() => setXBloom(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [playerXPhotoURL, opponent]);
+
+  useEffect(() => {
+    if (opponent !== 'online') return;
+
+    const wasWaiting = !prevOLabel.current || prevOLabel.current.includes('Waiting');
+    const isNowJoined = playerOLabel && !playerOLabel.includes('Waiting');
+    const photoChanged = playerOPhotoURL && playerOPhotoURL !== prevOPhoto.current;
+
+    if ((wasWaiting && isNowJoined) || photoChanged) {
+      prevOPhoto.current = playerOPhotoURL;
+      prevOLabel.current = playerOLabel;
+      setOAvatarKey((k) => k + 1);
+      setOBloom(true);
+      const timer = setTimeout(() => setOBloom(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [playerOPhotoURL, playerOLabel, opponent]);
 
   // Format difficulty text
   const difficultyLabel =
@@ -116,15 +169,31 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               {/* Profile Avatar & Corner Mark Badge */}
               <div className="relative shrink-0">
                 {opponent === 'online' || playerXPhotoURL ? (
-                  <>
+                  <div
+                    key={`player-x-avatar-${xAvatarKey}`}
+                    className={`relative shrink-0 ${
+                      opponent === 'online' ? 'animate-avatar-entry' : ''
+                    }`}
+                  >
+                    {/* Subtle bloom highlight on dynamic load in online matches */}
+                    {xBloom && opponent === 'online' && (
+                      <span
+                        className="absolute -inset-1.5 rounded-2xl animate-avatar-bloom pointer-events-none"
+                        style={{
+                          background: `radial-gradient(circle, ${theme.xColor}55 0%, transparent 70%)`,
+                        }}
+                      />
+                    )}
                     <UserAvatar
                       avatar={playerXAvatar}
                       photoURL={playerXPhotoURL}
                       size="md"
-                      className="ring-2 ring-cyan-500/40"
+                      className="ring-2 ring-cyan-500/40 relative z-10"
                     />
                     <span
-                      className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none"
+                      className={`absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none z-20 ${
+                        opponent === 'online' ? 'animate-badge-pop' : ''
+                      }`}
                       style={{
                         backgroundColor: theme.xColor,
                         color: '#020617',
@@ -134,7 +203,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
                     >
                       ✕
                     </span>
-                  </>
+                  </div>
                 ) : (
                   <div
                     className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center font-display font-black text-base sm:text-xl shadow-inner border shrink-0"
@@ -203,20 +272,32 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               {/* Profile Avatar & Corner Mark Badge */}
               <div className="relative shrink-0">
                 {opponent === 'online' ? (
-                  playerOLabel === 'Waiting...' || (!playerOAvatar && !playerOPhotoURL) ? (
+                  (!playerOLabel || playerOLabel.includes('Waiting')) && !playerOPhotoURL ? (
                     <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl border-2 border-dashed border-rose-500/40 bg-rose-500/10 flex items-center justify-center animate-pulse text-rose-500 text-xs">
                       <Clock className="w-4 h-4 animate-spin text-rose-400" />
                     </div>
                   ) : (
-                    <>
+                    <div
+                      key={`player-o-avatar-${oAvatarKey}`}
+                      className="relative shrink-0 animate-avatar-entry"
+                    >
+                      {/* Subtle bloom highlight on dynamic load in online matches */}
+                      {oBloom && (
+                        <span
+                          className="absolute -inset-1.5 rounded-2xl animate-avatar-bloom pointer-events-none"
+                          style={{
+                            background: `radial-gradient(circle, ${theme.oColor}55 0%, transparent 70%)`,
+                          }}
+                        />
+                      )}
                       <UserAvatar
-                        avatar={playerOAvatar}
+                        avatar={playerOAvatar || 'solar-phoenix'}
                         photoURL={playerOPhotoURL}
                         size="md"
-                        className="ring-2 ring-rose-500/40"
+                        className="ring-2 ring-rose-500/40 relative z-10"
                       />
                       <span
-                        className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none"
+                        className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shadow-md border-2 border-white dark:border-slate-900 leading-none select-none z-20 animate-badge-pop"
                         style={{
                           backgroundColor: theme.oColor,
                           color: '#020617',
@@ -226,7 +307,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
                       >
                         ◯
                       </span>
-                    </>
+                    </div>
                   )
                 ) : opponent === 'bot' ? (
                   <div
@@ -240,7 +321,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
                   >
                     <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-rose-500" />
                   </div>
-                ) : playerOPhotoURL ? (
+                ) : playerOPhotoURL || playerOAvatar ? (
                   <>
                     <UserAvatar
                       avatar={playerOAvatar}

@@ -35,6 +35,7 @@ import { PaletteBuilderModal } from './components/PaletteBuilderModal';
 import {
   ensureAuthenticatedUser,
   fetchProfileFromFirestore,
+  fetchProfileByEmailFromFirestore,
   saveProfileToFirestore,
   getCachedProfile,
   cacheProfile,
@@ -47,9 +48,12 @@ import {
   saveCustomPaletteToProfile,
   deleteCustomPaletteFromProfile,
   setActivePaletteInProfile,
+  updateOnlineRoomPlayerProfile,
+  syncRoomOpponentProfile,
 } from './utils/firebase';
 import { UserProfile, OnlineRoom, CustomPalette } from './types/game';
 import { checkWin, isBoardFull } from './utils/ai';
+import { triggerConfetti } from './utils/confetti';
 import { Radio, Users, Globe, Smile, LogOut, Settings } from 'lucide-react';
 
 const PREFS_STORAGE_KEY = 'apex_ttt_prefs_v1';
@@ -108,11 +112,40 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile>(() => getOrCreateLocalProfile());
   const [activeOnlineRoom, setActiveOnlineRoom] = useState<OnlineRoom | null>(null);
   const [onlineUserMark, setOnlineUserMark] = useState<'X' | 'O'>('X');
+  const onlineUserMarkRef = useRef<'X' | 'O'>('X');
+  useEffect(() => {
+    onlineUserMarkRef.current = onlineUserMark;
+  }, [onlineUserMark]);
   const [onlineEmoteDisplay, setOnlineEmoteDisplay] = useState<{ senderName: string; emoji: string } | null>(null);
 
   // Initialize Firebase Auth & sync with Firestore
   useEffect(() => {
     testFirebaseConnection();
+
+    // 1. If user previously logged in, restore complete cloud profile by email
+    const cached = getCachedProfile();
+    if (cached?.email && cached.isVerified) {
+      fetchProfileByEmailFromFirestore(cached.email).then((cloudProf) => {
+        if (cloudProf) {
+          setUserProfile((current) => {
+            const merged: UserProfile = {
+              ...current,
+              ...cloudProf,
+              photoURL: cloudProf.photoURL || current.photoURL || null,
+              bio: cloudProf.bio || current.bio || '',
+              website: cloudProf.website || current.website || '',
+              wins: Math.max(current.wins || 0, cloudProf.wins || 0),
+              totalGames: Math.max(current.totalGames || 0, cloudProf.totalGames || 0),
+              bestStreak: Math.max(current.bestStreak || 0, cloudProf.bestStreak || 0),
+            };
+            cacheProfile(merged);
+            return merged;
+          });
+        }
+      }).catch(() => {});
+    }
+
+    // 2. Ensure Firebase Auth session
     ensureAuthenticatedUser()
       .then(async (user) => {
         if (!user) return;
@@ -145,6 +178,18 @@ export default function App() {
     const unsubscribe = subscribeToOnlineRoom(activeOnlineRoom.id, (updatedRoom) => {
       setActiveOnlineRoom(updatedRoom);
 
+      // Auto-fetch opponent profile photo if missing
+      syncRoomOpponentProfile(updatedRoom, userProfile.uid).then((syncedRoom) => {
+        if (
+          syncedRoom.hostPhotoURL !== updatedRoom.hostPhotoURL ||
+          syncedRoom.guestPhotoURL !== updatedRoom.guestPhotoURL ||
+          syncedRoom.hostAvatar !== updatedRoom.hostAvatar ||
+          syncedRoom.guestAvatar !== updatedRoom.guestAvatar
+        ) {
+          setActiveOnlineRoom(syncedRoom);
+        }
+      });
+
       // Synchronize Board & Engine state
       engine.setBoard(updatedRoom.board);
       engine.setCurrentPlayer(updatedRoom.currentTurn);
@@ -152,9 +197,28 @@ export default function App() {
       if (updatedRoom.oPieceIndices) engine.setOPieceIndices(updatedRoom.oPieceIndices);
 
       if (updatedRoom.winner) {
+        const wasPlaying = engine.status === 'playing';
         engine.setStatus(updatedRoom.winner === 'draw' ? 'draw' : 'won');
         engine.setWinner(updatedRoom.winner === 'draw' ? null : updatedRoom.winner);
         if (updatedRoom.winningLine) engine.setWinningLine(updatedRoom.winningLine);
+
+        if (wasPlaying) {
+          const effectiveMyMark =
+            updatedRoom.guestId === userProfile.uid
+              ? 'O'
+              : updatedRoom.hostId === userProfile.uid
+              ? 'X'
+              : onlineUserMarkRef.current;
+
+          if (updatedRoom.winner === 'draw') {
+            sound.playDraw();
+          } else if (updatedRoom.winner === effectiveMyMark) {
+            sound.playWin();
+            triggerConfetti();
+          } else {
+            sound.playDefeat();
+          }
+        }
       } else {
         engine.setStatus('playing');
         engine.setWinner(null);
@@ -192,6 +256,105 @@ export default function App() {
   const currentTheme = activeCustomPalette
     ? customPaletteToTheme(activeCustomPalette)
     : THEMES[themeId] || THEMES['cyber-neon'];
+
+  // Robust Online User Role & Mark Detection
+  const isUserHost = Boolean(
+    activeOnlineRoom &&
+      (activeOnlineRoom.hostId === userProfile.uid ||
+        (activeOnlineRoom.guestId !== userProfile.uid && onlineUserMark === 'X'))
+  );
+
+  const isUserGuest = Boolean(
+    activeOnlineRoom &&
+      (activeOnlineRoom.guestId === userProfile.uid ||
+        (activeOnlineRoom.hostId !== userProfile.uid && onlineUserMark === 'O'))
+  );
+
+  const resolvedOnlineUserMark: 'X' | 'O' = isUserGuest ? 'O' : isUserHost ? 'X' : onlineUserMark;
+
+  // Keep onlineUserMark synchronized when active room resolves
+  useEffect(() => {
+    if (activeOnlineRoom) {
+      if (activeOnlineRoom.guestId === userProfile.uid && onlineUserMark !== 'O') {
+        setOnlineUserMark('O');
+      } else if (activeOnlineRoom.hostId === userProfile.uid && onlineUserMark !== 'X') {
+        setOnlineUserMark('X');
+      }
+    }
+  }, [activeOnlineRoom?.hostId, activeOnlineRoom?.guestId, userProfile.uid, onlineUserMark]);
+
+  // Keep local user profile actively synchronized into active online room so opponent always receives photo
+  useEffect(() => {
+    if (!activeOnlineRoom?.id || opponent !== 'online') return;
+
+    if (isUserHost) {
+      if (
+        (userProfile.photoURL && activeOnlineRoom.hostPhotoURL !== userProfile.photoURL) ||
+        (userProfile.avatar && activeOnlineRoom.hostAvatar !== userProfile.avatar) ||
+        (userProfile.displayName && activeOnlineRoom.hostName !== userProfile.displayName)
+      ) {
+        updateOnlineRoomPlayerProfile(activeOnlineRoom.id, true, userProfile).then((r) => {
+          if (r) setActiveOnlineRoom(r);
+        });
+      }
+    } else if (isUserGuest) {
+      if (
+        (userProfile.photoURL && activeOnlineRoom.guestPhotoURL !== userProfile.photoURL) ||
+        (userProfile.avatar && activeOnlineRoom.guestAvatar !== userProfile.avatar) ||
+        (userProfile.displayName && activeOnlineRoom.guestName !== userProfile.displayName)
+      ) {
+        updateOnlineRoomPlayerProfile(activeOnlineRoom.id, false, userProfile).then((r) => {
+          if (r) setActiveOnlineRoom(r);
+        });
+      }
+    }
+  }, [
+    activeOnlineRoom?.id,
+    activeOnlineRoom?.hostPhotoURL,
+    activeOnlineRoom?.guestPhotoURL,
+    activeOnlineRoom?.hostAvatar,
+    activeOnlineRoom?.guestAvatar,
+    activeOnlineRoom?.hostName,
+    activeOnlineRoom?.guestName,
+    userProfile.photoURL,
+    userProfile.avatar,
+    userProfile.displayName,
+    opponent,
+    isUserHost,
+    isUserGuest,
+  ]);
+
+  // Resolved Player X Profile (Host)
+  const resolvedPlayerXPhotoURL =
+    opponent === 'online'
+      ? isUserHost
+        ? userProfile.photoURL || activeOnlineRoom?.hostPhotoURL || null
+        : activeOnlineRoom?.hostPhotoURL || null
+      : userProfile.photoURL;
+
+  const resolvedPlayerXAvatar =
+    opponent === 'online'
+      ? isUserHost
+        ? userProfile.avatar || activeOnlineRoom?.hostAvatar || 'cyber-ninja'
+        : activeOnlineRoom?.hostAvatar || 'cyber-ninja'
+      : userProfile.avatar;
+
+  // Resolved Player O Profile (Guest / Bot / Local)
+  const resolvedPlayerOPhotoURL =
+    opponent === 'online'
+      ? isUserGuest
+        ? userProfile.photoURL || activeOnlineRoom?.guestPhotoURL || null
+        : activeOnlineRoom?.guestPhotoURL || null
+      : undefined;
+
+  const resolvedPlayerOAvatar =
+    opponent === 'online'
+      ? isUserGuest
+        ? userProfile.avatar || activeOnlineRoom?.guestAvatar || 'solar-phoenix'
+        : activeOnlineRoom?.guestAvatar || 'solar-phoenix'
+      : opponent === 'bot'
+      ? 'solar-phoenix'
+      : undefined;
 
   // Listen for System Dark Mode changes
   useEffect(() => {
@@ -541,7 +704,7 @@ export default function App() {
               ? 'You'
               : opponent === 'online'
               ? activeOnlineRoom?.hostName
-                ? `${activeOnlineRoom.hostName}${onlineUserMark === 'X' ? ' (You)' : ''}`
+                ? `${activeOnlineRoom.hostName}${isUserHost ? ' (You)' : ''}`
                 : 'Host (X)'
               : 'Player X'
           }
@@ -550,30 +713,14 @@ export default function App() {
               ? 'Gemini'
               : opponent === 'online'
               ? activeOnlineRoom?.guestName
-                ? `${activeOnlineRoom.guestName}${onlineUserMark === 'O' ? ' (You)' : ''}`
+                ? `${activeOnlineRoom.guestName}${isUserGuest ? ' (You)' : ''}`
                 : 'Waiting...'
               : 'Player O'
           }
-          playerXAvatar={
-            opponent === 'online'
-              ? activeOnlineRoom?.hostAvatar || (onlineUserMark === 'X' ? userProfile.avatar : 'cyber-ninja')
-              : userProfile.avatar
-          }
-          playerXPhotoURL={
-            opponent === 'online'
-              ? activeOnlineRoom?.hostPhotoURL || (onlineUserMark === 'X' ? userProfile.photoURL : null)
-              : userProfile.photoURL
-          }
-          playerOAvatar={
-            opponent === 'online'
-              ? activeOnlineRoom?.guestAvatar || (onlineUserMark === 'O' ? userProfile.avatar : null)
-              : undefined
-          }
-          playerOPhotoURL={
-            opponent === 'online'
-              ? activeOnlineRoom?.guestPhotoURL || (onlineUserMark === 'O' ? userProfile.photoURL : null)
-              : undefined
-          }
+          playerXAvatar={resolvedPlayerXAvatar}
+          playerXPhotoURL={resolvedPlayerXPhotoURL}
+          playerOAvatar={resolvedPlayerOAvatar}
+          playerOPhotoURL={resolvedPlayerOPhotoURL}
           onlineRoomCode={opponent === 'online' ? activeOnlineRoom?.id : null}
         />
 
@@ -669,6 +816,7 @@ export default function App() {
           opponent={opponent}
           theme={currentTheme}
           streakCount={engine.score.currentStreak}
+          onlineUserMark={opponent === 'online' ? resolvedOnlineUserMark : null}
           playerXName={
             opponent === 'online'
               ? activeOnlineRoom?.hostName || 'Host'
@@ -681,16 +829,16 @@ export default function App() {
           }
           winnerAvatar={
             engine.winner === 'X'
-              ? (opponent === 'online' ? activeOnlineRoom?.hostAvatar : userProfile.avatar)
+              ? resolvedPlayerXAvatar
               : engine.winner === 'O'
-              ? (opponent === 'online' ? activeOnlineRoom?.guestAvatar : undefined)
+              ? resolvedPlayerOAvatar
               : undefined
           }
           winnerPhotoURL={
             engine.winner === 'X'
-              ? (opponent === 'online' ? (activeOnlineRoom?.hostPhotoURL || (onlineUserMark === 'X' ? userProfile.photoURL : null)) : userProfile.photoURL)
+              ? resolvedPlayerXPhotoURL
               : engine.winner === 'O'
-              ? (opponent === 'online' ? (activeOnlineRoom?.guestPhotoURL || (onlineUserMark === 'O' ? userProfile.photoURL : null)) : undefined)
+              ? resolvedPlayerOPhotoURL
               : undefined
           }
           onPlayAgain={() => {
@@ -815,6 +963,11 @@ export default function App() {
           onSaveProfile={(updated) => {
             setUserProfile(updated);
             cacheProfile(updated);
+            if (activeOnlineRoom && opponent === 'online') {
+              updateOnlineRoomPlayerProfile(activeOnlineRoom.id, onlineUserMark === 'X', updated).then((r) => {
+                if (r) setActiveOnlineRoom(r);
+              });
+            }
           }}
           onOpenPaletteStudio={() => {
             setIsProfileModalOpen(false);

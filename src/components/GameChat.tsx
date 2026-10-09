@@ -76,7 +76,8 @@ export const GameChat: React.FC<GameChatProps> = ({
       userProfile.uid,
       userProfile.displayName,
       userProfile.avatar,
-      text
+      text,
+      userProfile.photoURL
     );
   };
 
@@ -164,6 +165,7 @@ export const GameChat: React.FC<GameChatProps> = ({
                     {!isMe && (
                       <UserAvatar
                         avatar={msg.senderAvatar}
+                        photoURL={msg.senderPhotoURL}
                         size="xs"
                         alt={msg.senderName}
                         className="shadow-sm"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AVATAR_PRESETS } from '../utils/firebase';
 
 interface UserAvatarProps {
@@ -8,6 +8,7 @@ interface UserAvatarProps {
   className?: string;
   alt?: string;
   showVerifiedBadge?: boolean;
+  animateEntry?: boolean;
 }
 
 export const UserAvatar: React.FC<UserAvatarProps> = ({
@@ -17,20 +18,35 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   className = '',
   alt = 'User avatar',
   showVerifiedBadge = false,
+  animateEntry = false,
 }) => {
   const [imageError, setImageError] = useState<boolean>(false);
 
-  // Determine if there is a custom photo uploaded (either in photoURL or avatar string)
-  const isCustomPhoto =
-    !imageError &&
-    ((photoURL && photoURL.trim().length > 0) ||
-      (avatar &&
-        (avatar.startsWith('data:image') ||
-          avatar.startsWith('http://') ||
-          avatar.startsWith('https://') ||
-          avatar.startsWith('blob:'))));
+  // Reset image error whenever photoURL or avatar changes
+  useEffect(() => {
+    setImageError(false);
+  }, [photoURL, avatar]);
 
-  const effectivePhotoSrc = photoURL && photoURL.trim().length > 0 ? photoURL : avatar;
+  // Clean and validate photo source
+  const validPhotoURL =
+    photoURL &&
+    typeof photoURL === 'string' &&
+    photoURL.trim().length > 0 &&
+    photoURL !== 'null' &&
+    photoURL !== 'undefined'
+      ? photoURL.trim()
+      : null;
+
+  const isAvatarUrl =
+    avatar &&
+    typeof avatar === 'string' &&
+    (avatar.startsWith('data:image') ||
+      avatar.startsWith('http://') ||
+      avatar.startsWith('https://') ||
+      avatar.startsWith('blob:'));
+
+  const effectivePhotoSrc = validPhotoURL || (isAvatarUrl ? avatar : null);
+  const isCustomPhoto = !imageError && Boolean(effectivePhotoSrc);
 
   // Preset avatar fallback
   const preset =
@@ -46,11 +62,9 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   }[size];
 
   return (
-    <div className={`relative shrink-0 select-none ${className}`}>
+    <div className={`relative shrink-0 select-none ${animateEntry ? 'animate-avatar-entry' : ''} ${className}`}>
       <div
-        className={`${sizeClasses} overflow-hidden shadow-sm flex items-center justify-center relative border border-white/20 dark:border-slate-700/60 transition-all ${
-          !isCustomPhoto ? `bg-gradient-to-br ${preset.gradient}` : 'bg-slate-800'
-        }`}
+        className={`${sizeClasses} overflow-hidden shadow-sm flex items-center justify-center relative border border-white/20 dark:border-slate-700/60 transition-all bg-gradient-to-br ${preset.gradient}`}
       >
         {isCustomPhoto && effectivePhotoSrc ? (
           <img

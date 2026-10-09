@@ -85,10 +85,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   // Authentication State
   const isCurrentlyLoggedIn = Boolean(currentProfile?.email && currentProfile?.isVerified);
+  const rememberedEmail =
+    typeof window !== 'undefined' ? localStorage.getItem('apex_last_logged_in_email') || '' : '';
+
   const [authMode, setAuthMode] = useState<'create_account' | 'login'>(
-    isCurrentlyLoggedIn ? 'login' : 'create_account'
+    isCurrentlyLoggedIn || rememberedEmail ? 'login' : 'create_account'
   );
-  const [authEmail, setAuthEmail] = useState<string>('');
+  const [authEmail, setAuthEmail] = useState<string>(
+    currentProfile?.email || rememberedEmail || ''
+  );
   const [authPassword, setAuthPassword] = useState<string>('');
   const [verificationCode, setVerificationCode] = useState<string>('');
   const [isCodeSent, setIsCodeSent] = useState<boolean>(false);
@@ -189,13 +194,19 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       sound.playWin();
 
       // Update app state with verified profile
-      onSaveProfile(res.profile);
-      setDisplayName(res.profile.displayName);
-      setSelectedAvatar(res.profile.avatar);
-      if (res.profile.photoURL) setCustomPhotoURL(res.profile.photoURL);
-      if (res.profile.bio) setBio(res.profile.bio);
-      if (res.profile.website) setWebsite(res.profile.website);
-      setSelectedTitle(res.profile.title || TITLES[0]);
+      const finalVerifiedPhoto = res.profile.photoURL || customPhotoURL || null;
+      const verifiedProfile: UserProfile = {
+        ...res.profile,
+        photoURL: finalVerifiedPhoto,
+      };
+
+      onSaveProfile(verifiedProfile);
+      setDisplayName(verifiedProfile.displayName);
+      setSelectedAvatar(verifiedProfile.avatar || AVATAR_PRESETS[0].id);
+      setCustomPhotoURL(finalVerifiedPhoto);
+      setBio(verifiedProfile.bio || '');
+      setWebsite(verifiedProfile.website || '');
+      setSelectedTitle(verifiedProfile.title || TITLES[0]);
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : 'Invalid verification code');
     } finally {
@@ -203,7 +214,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  // 4. Log In to Existing Account
+  // 4. Log In to Existing Account (Instagram / WhatsApp-style instant data restoration)
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = authEmail.trim().toLowerCase();
@@ -219,17 +230,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     try {
       const res = await loginWithEmail(cleanEmail, authPassword);
       sound.playWin();
-      setAuthSuccess(`Welcome back, ${res.profile.displayName}!`);
+      setAuthSuccess(`Welcome back, ${res.profile.displayName}! All profile data & photo restored.`);
 
-      // Update app profile
+      // Update app profile with restored cloud data
       onSaveProfile(res.profile);
       setDisplayName(res.profile.displayName);
-      setSelectedAvatar(res.profile.avatar);
-      if (res.profile.photoURL) setCustomPhotoURL(res.profile.photoURL);
-      if (res.profile.bio) setBio(res.profile.bio);
-      if (res.profile.website) setWebsite(res.profile.website);
+      setSelectedAvatar(res.profile.avatar || AVATAR_PRESETS[0].id);
+      setCustomPhotoURL(res.profile.photoURL || null);
+      setBio(res.profile.bio || '');
+      setWebsite(res.profile.website || '');
       setSelectedTitle(res.profile.title || TITLES[0]);
-      setTimeout(() => setAuthSuccess(null), 3000);
+      setTimeout(() => setAuthSuccess(null), 3500);
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : 'Login failed. Check your email and password.');
     } finally {
@@ -237,10 +248,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     }
   };
 
-  // 5. Log Out
+  // 5. Log Out (Resets active session but keeps cloud account safely backed up for 1-click re-login)
   const handleLogout = async () => {
     setAuthLoading(true);
     try {
+      const savedEmail = currentProfile?.email || authEmail || '';
       const guestProfile = await logoutUser();
       sound.playClick();
       onSaveProfile(guestProfile);
@@ -249,12 +261,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       setCustomPhotoURL(null);
       setBio('');
       setWebsite('');
-      setAuthEmail('');
+      setAuthEmail(savedEmail);
       setAuthPassword('');
+      setAuthMode('login'); // Pre-switch to login so user can easily log right back in
       setIsCodeSent(false);
       setAccountCreatedSuccess(false);
-      setAuthSuccess('Logged out successfully');
-      setTimeout(() => setAuthSuccess(null), 2500);
+      setAuthSuccess('Logged out safely. Your cloud profile & picture remain saved! Log in anytime to restore.');
+      setTimeout(() => setAuthSuccess(null), 3000);
     } catch (err) {
       console.warn('Logout notice:', err);
     } finally {
@@ -467,12 +480,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      Account Verified
+                      Account Verified & Synced
                     </span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
                     {currentProfile?.email}
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                    ✓ Photo, bio & match stats safely backed up in cloud
                   </div>
                 </div>
               </div>
@@ -483,6 +499,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 disabled={authLoading}
                 onClick={handleLogout}
                 className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-500 border border-rose-500/30 rounded-xl transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                title="Log out (your data remains safely stored in the cloud)"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Log Out</span>
@@ -686,8 +703,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     className="w-full py-2 px-3 text-xs font-bold rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
                   >
                     <LogIn className="w-3.5 h-3.5" />
-                    <span>{authLoading ? 'Signing In...' : 'Log In to Account'}</span>
+                    <span>{authLoading ? 'Restoring Profile...' : 'Log In & Restore Profile'}</span>
                   </button>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 text-center mt-1 flex items-center justify-center gap-1">
+                    <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span>Instantly restores your profile picture, bio, stats, and username.</span>
+                  </p>
                 </form>
               )}
             </div>

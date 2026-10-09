@@ -14,6 +14,7 @@ interface GameOverModalProps {
   playerOName?: string;
   winnerAvatar?: string | null;
   winnerPhotoURL?: string | null;
+  onlineUserMark?: Player | null;
   onPlayAgain: () => void;
   onReviewMatch: () => void;
   onClose: () => void;
@@ -29,6 +30,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   playerOName,
   winnerAvatar,
   winnerPhotoURL,
+  onlineUserMark,
   onPlayAgain,
   onReviewMatch,
   onClose,
@@ -36,28 +38,41 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   if (status === 'playing') return null;
 
   const isWin = status === 'won';
-  const isAiWinner = isWin && opponent === 'bot' && winner === 'O';
-  const winnerTitle =
-    isWin
-      ? opponent === 'bot'
-        ? isAiWinner
-          ? 'You Lose!'
-          : 'You Win!'
-        : opponent === 'online'
-        ? winner === 'X'
-          ? `${playerXName || 'Host'} Wins!`
-          : `${playerOName || 'Challenger'} Wins!`
-        : winner === 'X'
-        ? `${playerXName || 'Player X'} Wins!`
-        : `${playerOName || 'Player O'} Wins!`
-      : "It's a Draw!";
 
-  const accentColor =
-    isWin && winner === 'X'
+  // Determine if the current local player won or lost
+  let isUserWinner = false;
+  let isUserLoser = false;
+
+  if (isWin && winner) {
+    if (opponent === 'bot') {
+      isUserWinner = winner === 'X';
+      isUserLoser = winner === 'O';
+    } else if (opponent === 'online') {
+      const myMark = onlineUserMark || 'X';
+      isUserWinner = winner === myMark;
+      isUserLoser = winner !== myMark;
+    }
+  }
+
+  const winnerTitle = isWin
+    ? isUserWinner
+      ? 'You Win!'
+      : isUserLoser
+      ? 'You Lose!'
+      : winner === 'X'
+      ? `${playerXName || 'Player X'} Wins!`
+      : `${playerOName || 'Player O'} Wins!`
+    : "It's a Draw!";
+
+  const accentColor = isWin
+    ? isUserWinner
+      ? '#10b981'
+      : isUserLoser
+      ? '#f43f5e'
+      : winner === 'X'
       ? theme.xColor
-      : isWin && winner === 'O'
-      ? theme.oColor
-      : '#94a3b8';
+      : theme.oColor
+    : '#94a3b8';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 dark:bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
@@ -115,12 +130,10 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           <p className="text-xs text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
             {isWin
-              ? opponent === 'bot'
-                ? isAiWinner
-                  ? 'Better luck next time! Ready for a rematch?'
-                  : 'Congratulations! You defeated the Robot.'
-                : opponent === 'online'
-                ? `${winner === 'X' ? playerXName || 'Host' : playerOName || 'Challenger'} aligned the winning marks!`
+              ? isUserWinner
+                ? 'Congratulations! You claimed the victory!'
+                : isUserLoser
+                ? 'Better luck next time! Ready for a rematch?'
                 : `${winner === 'X' ? playerXName || 'Player X' : playerOName || 'Player O'} aligned the winning marks!`
               : 'Every move contested. Match ended in a draw!'}
           </p>
